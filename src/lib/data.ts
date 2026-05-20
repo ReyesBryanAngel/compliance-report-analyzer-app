@@ -22,6 +22,13 @@ export const WORKFLOWS: Workflow[] = [
     iconType: 'alert',
     colorScheme: 'red',
   },
+  {
+    id: 'document-integrity',
+    name: 'Document Integrity',
+    description: 'Verify document authenticity and detect tampering',
+    iconType: 'scan',
+    colorScheme: 'teal',
+  },
 ]
 
 export const INITIAL_FILES: UploadedFile[] = [

@@ -1,11 +1,11 @@
-export type WorkflowId = 'affordability' | 'gambling' | 'aml'
+export type WorkflowId = 'affordability' | 'gambling' | 'aml' | 'document-integrity'
 
 export interface Workflow {
   id: WorkflowId
   name: string
   description: string
-  iconType: 'shield' | 'dice' | 'alert'
-  colorScheme: 'purple' | 'amber' | 'red'
+  iconType: 'shield' | 'dice' | 'alert' | 'scan'
+  colorScheme: 'purple' | 'amber' | 'red' | 'teal'
 }
 
 export type DocumentStatus = 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'COMPLETED' | 'FAILED'
@@ -54,4 +54,82 @@ export interface Report {
   workflowId: WorkflowId
   generatedAt: string
   status: 'Ready' | 'Generating'
+}
+
+export interface ApiReportDocument {
+  id: string
+  fileName: string
+}
+
+export interface ApiReportBatch {
+  id: string
+  name: string
+}
+
+export interface ApiReport {
+  id: string
+  title: string
+  status: DocumentStatus
+  documentIds: string[]
+  documents: ApiReportDocument[]
+  batches: ApiReportBatch[]
+  workflows: string[]
+  createdAt: string
+}
+
+export interface ApiReportsListResponse {
+  reports: ApiReport[]
+}
+
+export interface ReportEvidence {
+  date: string
+  description: string
+  amount: number
+  direction: 'inflow' | 'outflow'
+  balance: number
+  category?: string
+  channel: string
+  reference: string
+}
+
+export interface ReportFinding {
+  checkpoint: string
+  triggered: boolean
+  severity: 'high' | 'medium' | 'low'
+  score: number
+  reason: string
+  evidence: ReportEvidence[]
+}
+
+export interface ReportResult {
+  workflow: string
+  overallScore: number
+  findings: ReportFinding[]
+}
+
+export interface ReportCheck {
+  id: string
+  rule: string
+  passed: boolean
+  details: string
+}
+
+export interface ReportSummary {
+  totalDocuments: number
+  totalTransactions: number
+  overallRiskScore: number
+  triggeredChecks: number
+  highRiskFindings: number
+}
+
+export interface ApiReportDetail {
+  id: string
+  title: string
+  status: string
+  documentIds: string[]
+  workflows: string[]
+  results: ReportResult[]
+  checks: ReportCheck[]
+  summary: ReportSummary
+  createdAt: string
 }

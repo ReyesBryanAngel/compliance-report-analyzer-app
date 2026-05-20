@@ -1,4 +1,4 @@
-import type { ApiDocument, ApiListResponse, ApiUploadResponse } from './types'
+import type { ApiDocument, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadResponse } from './types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3000/api/v1'
 
@@ -33,4 +33,18 @@ export async function listDocuments(): Promise<ApiDocument[]> {
   if (!res.ok) throw new Error(`List failed (${res.status})`)
   const data = (await res.json()) as ApiListResponse
   return data.documents
+}
+
+export async function listReports(workflow?: string): Promise<ApiReport[]> {
+  const url = workflow ? `${API_BASE}/reports/list?workflow=${encodeURIComponent(workflow)}` : `${API_BASE}/reports/list`
+  const res = await fetch(url, { headers: getAuthHeader() })
+  if (!res.ok) throw new Error(`List reports failed (${res.status})`)
+  const data = (await res.json()) as ApiReportsListResponse
+  return data.reports
+}
+
+export async function getReport(id: string): Promise<ApiReportDetail> {
+  const res = await fetch(`${API_BASE}/reports/${id}`, { headers: getAuthHeader() })
+  if (!res.ok) throw new Error(`Get report failed (${res.status})`)
+  return res.json() as Promise<ApiReportDetail>
 }

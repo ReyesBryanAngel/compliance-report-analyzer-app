@@ -1,16 +1,18 @@
 import { INITIAL_FILES, INITIAL_REPORTS, WORKFLOWS } from '@/lib/data'
-import { ShieldIcon, DiceIcon, AlertTriangleIcon, FileIcon, FileTextIcon } from '@/components/icons'
+import { ShieldIcon, DiceIcon, AlertTriangleIcon, ScanDocumentIcon, FileIcon, FileTextIcon } from '@/components/icons'
 
 const workflowIconMap = {
   shield: ShieldIcon,
   dice: DiceIcon,
   alert: AlertTriangleIcon,
+  scan: ScanDocumentIcon,
 } as const
 
 const workflowColorMap = {
   purple: { bg: 'bg-indigo-50', text: 'text-indigo-500' },
   amber: { bg: 'bg-amber-50', text: 'text-amber-500' },
   red: { bg: 'bg-rose-50', text: 'text-rose-500' },
+  teal: { bg: 'bg-teal-50', text: 'text-teal-500' },
 } as const
 
 export default function DashboardPage() {

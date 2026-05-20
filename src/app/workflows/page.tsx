@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { WORKFLOWS, INITIAL_REPORTS } from '@/lib/data'
-import { uploadDocument, listDocuments } from '@/lib/api'
-import type { WorkflowId, ApiDocument, DocumentStatus } from '@/lib/types'
+import { WORKFLOWS } from '@/lib/data'
+import { uploadDocument, listDocuments, listReports, getReport } from '@/lib/api'
+import type { WorkflowId, ApiDocument, ApiReport, ApiReportDetail, ReportFinding, DocumentStatus } from '@/lib/types'
 import {
   ShieldIcon,
   DiceIcon,
   AlertTriangleIcon,
+  ScanDocumentIcon,
   UploadCloudIcon,
   SearchIcon,
   ChevronDownIcon,
@@ -21,13 +22,22 @@ const workflowIconMap = {
   shield: ShieldIcon,
   dice: DiceIcon,
   alert: AlertTriangleIcon,
+  scan: ScanDocumentIcon,
 } as const
 
 const workflowColorMap = {
   purple: { iconBg: 'bg-indigo-50', iconText: 'text-indigo-500', border: 'border-indigo-500' },
   amber: { iconBg: 'bg-amber-50', iconText: 'text-amber-500', border: 'border-amber-500' },
   red: { iconBg: 'bg-rose-50', iconText: 'text-rose-500', border: 'border-rose-500' },
+  teal: { iconBg: 'bg-teal-50', iconText: 'text-teal-500', border: 'border-teal-500' },
 } as const
+
+const WORKFLOW_API_CODE: Record<WorkflowId, string> = {
+  affordability: 'kyc',
+  gambling: 'sg',
+  aml: 'traml',
+  'document-integrity': 'document-integrity',
+}
 
 const STATUS_LABEL: Record<DocumentStatus, string> = {
   PENDING: 'Pending',
@@ -45,15 +55,131 @@ const STATUS_BADGE: Record<DocumentStatus, string> = {
   FAILED: 'bg-red-50 text-red-700',
 }
 
-const reportStatusBadge: Record<string, string> = {
-  Ready: 'bg-emerald-50 text-emerald-700',
-  Generating: 'bg-amber-50 text-amber-700',
-}
-
 const FILE_STATUS_OPTIONS = ['All Status', 'PENDING', 'PROCESSING', 'PROCESSED', 'COMPLETED', 'FAILED']
-const REPORT_STATUS_OPTIONS = ['All Status', 'Ready', 'Generating']
+const REPORT_STATUS_OPTIONS = ['All Status', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']
 
 type Tab = 'file-processing' | 'reports'
+
+const SEVERITY_BADGE: Record<string, string> = {
+  high: 'bg-red-100 text-red-700',
+  medium: 'bg-amber-100 text-amber-700',
+  low: 'bg-emerald-100 text-emerald-700',
+}
+
+const EVIDENCE_PAGE_SIZE = 10
+
+function FindingCard({ finding }: { finding: ReportFinding }) {
+  const [expanded, setExpanded] = useState(false)
+  const [page, setPage] = useState(0)
+
+  const totalPages = Math.ceil(finding.evidence.length / EVIDENCE_PAGE_SIZE)
+  const pageEvidence = finding.evidence.slice(page * EVIDENCE_PAGE_SIZE, (page + 1) * EVIDENCE_PAGE_SIZE)
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      {/* Finding header */}
+      <div className={`px-5 py-4 flex items-start gap-4 ${finding.triggered ? 'bg-red-50/60' : 'bg-emerald-50/60'}`}>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <span className="text-sm font-semibold text-slate-800 capitalize">
+              {finding.checkpoint.replace(/-/g, ' ')}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${SEVERITY_BADGE[finding.severity] ?? 'bg-slate-100 text-slate-600'}`}>
+              {finding.severity}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${finding.triggered ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+              {finding.triggered ? 'Triggered' : 'Clear'}
+            </span>
+          </div>
+          <p className="text-xs text-slate-600 leading-relaxed">{finding.reason}</p>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className={`text-xl font-bold ${finding.score >= 70 ? 'text-red-600' : finding.score >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
+            {finding.score}
+          </p>
+          <p className="text-xs text-slate-400">score</p>
+        </div>
+      </div>
+
+      {/* Evidence toggle */}
+      {finding.evidence.length > 0 && (
+        <>
+          <button
+            onClick={() => { setExpanded(!expanded); setPage(0) }}
+            className="w-full flex items-center justify-between px-5 py-2.5 text-xs text-slate-500 hover:bg-slate-50 border-t border-slate-100 transition-colors"
+          >
+            <span>{finding.evidence.length} transaction{finding.evidence.length !== 1 ? 's' : ''} flagged as evidence</span>
+            <span className={`transition-transform ${expanded ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+
+          {expanded && (
+            <div className="border-t border-slate-100">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-600">
+                      <th className="text-left px-4 py-2.5 font-medium">Date</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Description</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Direction</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Amount</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Balance</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Channel</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageEvidence.map((ev) => (
+                      <tr key={ev.reference} className="border-t border-slate-50 hover:bg-slate-50/50">
+                        <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{ev.date}</td>
+                        <td className="px-4 py-2 text-slate-700">{ev.description}</td>
+                        <td className="px-4 py-2">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${ev.direction === 'inflow' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                            {ev.direction === 'inflow' ? '↑' : '↓'} {ev.direction}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-right text-slate-700 whitespace-nowrap font-mono">
+                          {ev.amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2 text-right text-slate-500 whitespace-nowrap font-mono">
+                          {ev.balance.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2 text-slate-500 capitalize">{ev.channel}</td>
+                        <td className="px-4 py-2 text-slate-400 font-mono">{ev.reference}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50/50">
+                  <span className="text-xs text-slate-400">
+                    Page {page + 1} of {totalPages}
+                  </span>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                      className="px-2.5 py-1 text-xs text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={page === totalPages - 1}
+                      className="px-2.5 py-1 text-xs text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('en-GB', {
@@ -69,7 +195,9 @@ export default function WorkflowsPage() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowId>('affordability')
   const [activeTab, setActiveTab] = useState<Tab>('file-processing')
   const [documents, setDocuments] = useState<ApiDocument[]>([])
+  const [reports, setReports] = useState<ApiReport[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingReports, setIsLoadingReports] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
@@ -80,6 +208,9 @@ export default function WorkflowsPage() {
   const [batchName, setBatchName] = useState('')
   const [batchDescription, setBatchDescription] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [reportDetail, setReportDetail] = useState<ApiReportDetail | null>(null)
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
+  const [reportDetailError, setReportDetailError] = useState<string | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -90,10 +221,38 @@ export default function WorkflowsPage() {
     }
   }, [])
 
+  const fetchReports = useCallback(async () => {
+    try {
+      const data = await listReports(WORKFLOW_API_CODE[selectedWorkflow])
+      setReports(data)
+    } catch {
+      // keep existing reports on refresh error
+    }
+  }, [selectedWorkflow])
+
+  const handleViewReport = useCallback(async (id: string) => {
+    setIsLoadingDetail(true)
+    setReportDetailError(null)
+    setReportDetail(null)
+    try {
+      const detail = await getReport(id)
+      setReportDetail(detail)
+    } catch (err) {
+      setReportDetailError(err instanceof Error ? err.message : 'Failed to load report')
+    } finally {
+      setIsLoadingDetail(false)
+    }
+  }, [])
+
   useEffect(() => {
     setIsLoading(true)
     fetchDocuments().finally(() => setIsLoading(false))
   }, [fetchDocuments])
+
+  useEffect(() => {
+    setIsLoadingReports(true)
+    fetchReports().finally(() => setIsLoadingReports(false))
+  }, [fetchReports])
 
   const handleFiles = useCallback(
     async (incoming: File[], batchName: string, batchDescription: string) => {
@@ -188,9 +347,11 @@ export default function WorkflowsPage() {
     return matchSearch && matchStatus
   })
 
-  const filteredReports = INITIAL_REPORTS.filter((r) => {
-    if (r.workflowId !== selectedWorkflow) return false
-    const matchSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredReports = reports.filter((r) => {
+    const q = searchQuery.toLowerCase()
+    const batchNames = r.batches.map((b) => b.name).join(' ')
+    const fileNames = r.documents.map((d) => d.fileName).join(' ')
+    const matchSearch = batchNames.toLowerCase().includes(q) || fileNames.toLowerCase().includes(q)
     const matchStatus = statusFilter === 'All Status' || r.status === statusFilter
     return matchSearch && matchStatus
   })
@@ -250,10 +411,98 @@ export default function WorkflowsPage() {
           </div>
         </div>
       )}
+      {/* Report detail modal */}
+      {(isLoadingDetail || reportDetail || reportDetailError) && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto py-8 px-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl">
+            {/* Modal header */}
+            <div className="flex items-start justify-between p-6 border-b border-slate-200">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">
+                  {reportDetail?.title ?? 'Loading Report…'}
+                </h2>
+                {reportDetail && (
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Generated {formatDate(reportDetail.createdAt)}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => { setReportDetail(null); setReportDetailError(null) }}
+                className="ml-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6">
+              {isLoadingDetail && (
+                <div className="py-16 text-center text-sm text-slate-400">Loading report…</div>
+              )}
+
+              {reportDetailError && (
+                <div className="py-8 text-center text-sm text-red-500">{reportDetailError}</div>
+              )}
+
+              {reportDetail && (
+                <>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-5 gap-3 mb-6">
+                    <div className={`rounded-xl p-4 text-center ${reportDetail.summary.overallRiskScore >= 70 ? 'bg-red-50' : reportDetail.summary.overallRiskScore >= 40 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+                      <p className={`text-2xl font-bold ${reportDetail.summary.overallRiskScore >= 70 ? 'text-red-600' : reportDetail.summary.overallRiskScore >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {reportDetail.summary.overallRiskScore}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">Risk Score</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-slate-800">{reportDetail.summary.totalTransactions}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Transactions</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-slate-800">{reportDetail.summary.totalDocuments}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Documents</p>
+                    </div>
+                    <div className="bg-amber-50 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-amber-600">{reportDetail.summary.triggeredChecks}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Triggered Checks</p>
+                    </div>
+                    <div className="bg-red-50 rounded-xl p-4 text-center">
+                      <p className="text-2xl font-bold text-red-600">{reportDetail.summary.highRiskFindings}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">High Risk</p>
+                    </div>
+                  </div>
+
+                  {/* Findings per workflow */}
+                  {reportDetail.results.map((result) => (
+                    <div key={result.workflow} className="mb-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className="px-2.5 py-1 text-xs font-bold bg-slate-800 text-white rounded-md uppercase tracking-wider">
+                          {result.workflow}
+                        </span>
+                        <span className="text-sm text-slate-500">Overall Score:</span>
+                        <span className={`text-sm font-semibold ${result.overallScore >= 70 ? 'text-red-600' : result.overallScore >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {result.overallScore} / 100
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        {result.findings.map((finding) => (
+                          <FindingCard key={finding.checkpoint} finding={finding} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-2xl font-bold text-slate-800 mb-6">Workflows</h1>
 
       {/* Workflow selection cards */}
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-4 gap-4 mb-5">
         {WORKFLOWS.map((workflow) => {
           const Icon = workflowIconMap[workflow.iconType]
           const colors = workflowColorMap[workflow.colorScheme]
@@ -440,29 +689,51 @@ export default function WorkflowsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="text-left px-5 py-3 font-semibold text-slate-700">Report Name</th>
+                  <th className="text-left px-5 py-3 font-semibold text-slate-700">Batch Name</th>
+                  <th className="text-left px-5 py-3 font-semibold text-slate-700">File Name</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">Generated At</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">Status</th>
+                  <th className="text-left px-5 py-3 font-semibold text-slate-700">View Report</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredReports.length === 0 ? (
+                {isLoadingReports ? (
                   <tr>
-                    <td colSpan={3} className="px-5 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">
+                      Loading…
+                    </td>
+                  </tr>
+                ) : filteredReports.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">
                       No reports generated yet
                     </td>
                   </tr>
                 ) : (
                   filteredReports.map((report) => (
                     <tr key={report.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-5 py-3.5 text-slate-600">{report.name}</td>
-                      <td className="px-5 py-3.5 text-slate-500">{report.generatedAt}</td>
+                      <td className="px-5 py-3.5 text-slate-600">
+                        {report.batches.length > 0 ? report.batches.map((b) => b.name).join(', ') : '-'}
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-600">
+                        {report.documents.length > 0 ? report.documents.map((d) => d.fileName).join(', ') : '-'}
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-500">{formatDate(report.createdAt)}</td>
                       <td className="px-5 py-3.5">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${reportStatusBadge[report.status] ?? 'bg-slate-100 text-slate-600'}`}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[report.status] ?? 'bg-slate-100 text-slate-600'}`}
                         >
-                          {report.status}
+                          {STATUS_LABEL[report.status] ?? report.status}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <button
+                          onClick={() => handleViewReport(report.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                        >
+                          <FileTextIcon className="w-3.5 h-3.5" />
+                          View Report
+                        </button>
                       </td>
                     </tr>
                   ))
