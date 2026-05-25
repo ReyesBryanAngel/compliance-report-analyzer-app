@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { WORKFLOWS } from '@/lib/data'
-import { uploadDocument, listDocuments, listReports, getReport } from '@/lib/api'
-import type { WorkflowId, ApiDocument, ApiReport, ApiReportDetail, ReportFinding, DocumentStatus } from '@/lib/types'
+import { uploadDocument, listDocuments, listReports, getReport, generateReport } from '@/lib/api'
+import type { WorkflowId, ApiDocument, ApiReport, ApiReportDetail, ReportFinding, DocumentStatus, ReportStatus } from '@/lib/types'
 import {
   ShieldIcon,
   DiceIcon,
@@ -39,24 +39,32 @@ const WORKFLOW_API_CODE: Record<WorkflowId, string> = {
   'document-integrity': 'document-integrity',
 }
 
-const STATUS_LABEL: Record<DocumentStatus, string> = {
-  PENDING: 'Pending',
+const DOC_STATUS_LABEL: Record<DocumentStatus, string> = {
   PROCESSING: 'Processing',
-  PROCESSED: 'Processed',
   COMPLETED: 'Completed',
   FAILED: 'Failed',
 }
 
-const STATUS_BADGE: Record<DocumentStatus, string> = {
-  PENDING: 'bg-slate-100 text-slate-600',
+const DOC_STATUS_BADGE: Record<DocumentStatus, string> = {
   PROCESSING: 'bg-blue-50 text-blue-700',
-  PROCESSED: 'bg-cyan-50 text-cyan-700',
   COMPLETED: 'bg-emerald-50 text-emerald-700',
   FAILED: 'bg-red-50 text-red-700',
 }
 
-const FILE_STATUS_OPTIONS = ['All Status', 'PENDING', 'PROCESSING', 'PROCESSED', 'COMPLETED', 'FAILED']
-const REPORT_STATUS_OPTIONS = ['All Status', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']
+const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
+  GENERATING: 'Generating',
+  COMPLETED: 'Completed',
+  FAILED: 'Failed',
+}
+
+const REPORT_STATUS_BADGE: Record<ReportStatus, string> = {
+  GENERATING: 'bg-blue-50 text-blue-700',
+  COMPLETED: 'bg-emerald-50 text-emerald-700',
+  FAILED: 'bg-red-50 text-red-700',
+}
+
+const FILE_STATUS_OPTIONS = ['All Status', 'PROCESSING', 'COMPLETED', 'FAILED']
+const REPORT_STATUS_OPTIONS = ['All Status', 'GENERATING', 'COMPLETED', 'FAILED']
 
 type Tab = 'file-processing' | 'reports'
 
@@ -128,8 +136,8 @@ function FindingCard({ finding }: { finding: ReportFinding }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {pageEvidence.map((ev) => (
-                      <tr key={ev.reference} className="border-t border-slate-50 hover:bg-slate-50/50">
+                    {pageEvidence.map((ev, i) => (
+                      <tr key={`${ev.reference}-${i}`} className="border-t border-slate-50 hover:bg-slate-50/50">
                         <td className="px-4 py-2 text-slate-500 whitespace-nowrap">{ev.date}</td>
                         <td className="px-4 py-2 text-slate-700">{ev.description}</td>
                         <td className="px-4 py-2">
@@ -211,6 +219,11 @@ export default function WorkflowsPage() {
   const [reportDetail, setReportDetail] = useState<ApiReportDetail | null>(null)
   const [isLoadingDetail, setIsLoadingDetail] = useState(false)
   const [reportDetailError, setReportDetailError] = useState<string | null>(null)
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set())
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [selectedWorkflowsForReport, setSelectedWorkflowsForReport] = useState<Set<string>>(new Set())
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -337,6 +350,34 @@ export default function WorkflowsPage() {
     setStatusFilter('All Status')
   }
 
+  const toggleDocumentSelection = useCallback((id: string) => {
+    setSelectedDocumentIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const handleGenerateReportSubmit = useCallback(async () => {
+    setIsGenerating(true)
+    setGenerateError(null)
+    try {
+      await generateReport(
+        Array.from(selectedWorkflowsForReport),
+        Array.from(selectedDocumentIds),
+      )
+      setShowGenerateModal(false)
+      setSelectedWorkflowsForReport(new Set())
+      setSelectedDocumentIds(new Set())
+      fetchReports()
+    } catch (err) {
+      setGenerateError(err instanceof Error ? err.message : 'Failed to generate report')
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [selectedWorkflowsForReport, selectedDocumentIds, fetchReports])
+
   const statuses = activeTab === 'file-processing' ? FILE_STATUS_OPTIONS : REPORT_STATUS_OPTIONS
 
   const filteredDocuments = documents.filter((d) => {
@@ -358,6 +399,73 @@ export default function WorkflowsPage() {
 
   return (
     <div className="flex-1 p-8">
+      {/* Generate Report modal */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h2 className="text-lg font-semibold text-slate-800 mb-1">Generate Report</h2>
+            <p className="text-sm text-slate-500 mb-5">
+              {selectedDocumentIds.size} file{selectedDocumentIds.size !== 1 ? 's' : ''} selected. Choose one or more workflows to run.
+            </p>
+
+            <div className="mb-6 space-y-3">
+              {WORKFLOWS.map((workflow) => {
+                const apiCode = WORKFLOW_API_CODE[workflow.id]
+                const checked = selectedWorkflowsForReport.has(apiCode)
+                return (
+                  <label key={workflow.id} className="flex items-start gap-3 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setSelectedWorkflowsForReport((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(apiCode)) next.delete(apiCode)
+                          else next.add(apiCode)
+                          return next
+                        })
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-slate-800 group-hover:text-indigo-700 transition-colors">
+                        {workflow.name}
+                      </p>
+                      <p className="text-xs text-slate-500">{workflow.description}</p>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+
+            {generateError && (
+              <p className="mb-4 text-xs text-red-600">{generateError}</p>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowGenerateModal(false)
+                  setSelectedWorkflowsForReport(new Set())
+                  setGenerateError(null)
+                }}
+                disabled={isGenerating}
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateReportSubmit}
+                disabled={selectedWorkflowsForReport.size === 0 || isGenerating}
+                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                {isGenerating ? 'Generating…' : 'Proceed'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Upload modal */}
       {pendingFiles && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -584,28 +692,38 @@ export default function WorkflowsPage() {
       {/* Tabs + Table */}
       <div className="bg-white rounded-xl border border-slate-200">
         {/* Tab buttons */}
-        <div className="flex border-b border-slate-200 px-5">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5">
+          <div className="flex">
+            <button
+              onClick={() => handleTabChange('file-processing')}
+              className={`flex items-center gap-2 py-4 px-1 mr-6 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === 'file-processing'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <UploadIcon className="w-4 h-4" />
+              File Processing
+            </button>
+            <button
+              onClick={() => handleTabChange('reports')}
+              className={`flex items-center gap-2 py-4 px-1 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === 'reports'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <FileTextIcon className="w-4 h-4" />
+              Reports
+            </button>
+          </div>
           <button
-            onClick={() => handleTabChange('file-processing')}
-            className={`flex items-center gap-2 py-4 px-1 mr-6 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === 'file-processing'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <UploadIcon className="w-4 h-4" />
-            File Processing
-          </button>
-          <button
-            onClick={() => handleTabChange('reports')}
-            className={`flex items-center gap-2 py-4 px-1 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === 'reports'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+            onClick={() => setShowGenerateModal(true)}
+            disabled={selectedDocumentIds.size === 0}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
             <FileTextIcon className="w-4 h-4" />
-            Reports
+            Generate Report
           </button>
         </div>
 
@@ -629,7 +747,7 @@ export default function WorkflowsPage() {
             >
               {statuses.map((s) => (
                 <option key={s} value={s}>
-                  {s === 'All Status' ? s : (STATUS_LABEL[s as DocumentStatus] ?? s)}
+                  {s === 'All Status' ? s : (activeTab === 'file-processing' ? (DOC_STATUS_LABEL[s as DocumentStatus] ?? s) : (REPORT_STATUS_LABEL[s as ReportStatus] ?? s))}
                 </option>
               ))}
             </select>
@@ -643,6 +761,34 @@ export default function WorkflowsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50">
+                  <th className="px-5 py-3 w-10">
+                    {(() => {
+                      const completedDocs = filteredDocuments.filter((d) => d.status === 'COMPLETED')
+                      return (
+                        <input
+                          type="checkbox"
+                          checked={completedDocs.length > 0 && completedDocs.every((d) => selectedDocumentIds.has(d.id))}
+                          disabled={completedDocs.length === 0}
+                          onChange={() => {
+                            if (completedDocs.every((d) => selectedDocumentIds.has(d.id))) {
+                              setSelectedDocumentIds((prev) => {
+                                const next = new Set(prev)
+                                completedDocs.forEach((d) => next.delete(d.id))
+                                return next
+                              })
+                            } else {
+                              setSelectedDocumentIds((prev) => {
+                                const next = new Set(prev)
+                                completedDocs.forEach((d) => next.add(d.id))
+                                return next
+                              })
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                        />
+                      )
+                    })()}
+                  </th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">Batch Name</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">File Name</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">Status</th>
@@ -652,26 +798,38 @@ export default function WorkflowsPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">
                       Loading…
                     </td>
                   </tr>
                 ) : filteredDocuments.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">
                       No files uploaded yet
                     </td>
                   </tr>
                 ) : (
                   filteredDocuments.map((doc) => (
-                    <tr key={doc.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                    <tr
+                      key={doc.id}
+                      className={`border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${selectedDocumentIds.has(doc.id) ? 'bg-indigo-50/40' : ''}`}
+                    >
+                      <td className="px-5 py-3.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedDocumentIds.has(doc.id)}
+                          disabled={doc.status !== 'COMPLETED'}
+                          onChange={() => toggleDocumentSelection(doc.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                        />
+                      </td>
                       <td className="px-5 py-3.5 text-slate-600">{doc.batch?.name ?? '-'}</td>
                       <td className="px-5 py-3.5 text-slate-600">{doc.originalName}</td>
                       <td className="px-5 py-3.5">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[doc.status] ?? 'bg-slate-100 text-slate-600'}`}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${DOC_STATUS_BADGE[doc.status] ?? 'bg-slate-100 text-slate-600'}`}
                         >
-                          {STATUS_LABEL[doc.status] ?? doc.status}
+                          {DOC_STATUS_LABEL[doc.status] ?? doc.status}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-slate-500">{formatDate(doc.createdAt)}</td>
@@ -693,19 +851,20 @@ export default function WorkflowsPage() {
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">File Name</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">Generated At</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">Status</th>
+                  <th className="text-left px-5 py-3 font-semibold text-slate-700">Severity</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700">View Report</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoadingReports ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm text-slate-400">
                       Loading…
                     </td>
                   </tr>
                 ) : filteredReports.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm text-slate-400">
                       No reports generated yet
                     </td>
                   </tr>
@@ -721,10 +880,19 @@ export default function WorkflowsPage() {
                       <td className="px-5 py-3.5 text-slate-500">{formatDate(report.createdAt)}</td>
                       <td className="px-5 py-3.5">
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[report.status] ?? 'bg-slate-100 text-slate-600'}`}
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${REPORT_STATUS_BADGE[report.status] ?? 'bg-slate-100 text-slate-600'}`}
                         >
-                          {STATUS_LABEL[report.status] ?? report.status}
+                          {REPORT_STATUS_LABEL[report.status] ?? report.status}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {report.summary?.severity ? (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${SEVERITY_BADGE[report.summary.severity] ?? 'bg-slate-100 text-slate-600'}`}>
+                            {report.summary.severity}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5">
                         <button

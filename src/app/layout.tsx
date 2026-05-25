@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Compliance Report Analyzer',
+  title: 'Complytica',
   description: 'Analyze compliance reports across multiple workflows',
 }
 

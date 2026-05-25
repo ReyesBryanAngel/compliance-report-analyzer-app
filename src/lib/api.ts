@@ -48,3 +48,12 @@ export async function getReport(id: string): Promise<ApiReportDetail> {
   if (!res.ok) throw new Error(`Get report failed (${res.status})`)
   return res.json() as Promise<ApiReportDetail>
 }
+
+export async function generateReport(workflows: string[], documentIds: string[]): Promise<void> {
+  const res = await fetch(`${API_BASE}/reports/generate`, {
+    method: 'POST',
+    headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflows, document_ids: documentIds }),
+  })
+  if (!res.ok) throw new Error(`Generate report failed (${res.status})`)
+}

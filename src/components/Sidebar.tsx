@@ -17,7 +17,8 @@ export default function Sidebar() {
     <aside className="w-56 min-h-screen bg-slate-900 flex-shrink-0 flex flex-col">
       <div className="px-5 pt-6 pb-5">
         <p className="text-white font-bold text-[15px] leading-snug">
-          Compliance Report<br />Analyzer
+          {/* Compliance Report<br />Analyzer */}
+          Complytica
         </p>
       </div>
 

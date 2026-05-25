@@ -8,7 +8,8 @@ export interface Workflow {
   colorScheme: 'purple' | 'amber' | 'red' | 'teal'
 }
 
-export type DocumentStatus = 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'COMPLETED' | 'FAILED'
+export type DocumentStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED'
+export type ReportStatus = 'GENERATING' | 'COMPLETED' | 'FAILED'
 
 export interface ApiBatch {
   id: string
@@ -66,14 +67,24 @@ export interface ApiReportBatch {
   name: string
 }
 
+export interface ApiReportSummary {
+  severity: 'low' | 'medium' | 'high'
+  totalDocuments: number
+  totalTransactions: number
+  overallRiskScore: number
+  triggeredChecks: number
+  highRiskFindings: number
+}
+
 export interface ApiReport {
   id: string
   title: string
-  status: DocumentStatus
+  status: ReportStatus
   documentIds: string[]
   documents: ApiReportDocument[]
   batches: ApiReportBatch[]
   workflows: string[]
+  summary?: ApiReportSummary
   createdAt: string
 }
 
