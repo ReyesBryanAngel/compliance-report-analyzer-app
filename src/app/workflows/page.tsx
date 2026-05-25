@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { WORKFLOWS } from '@/lib/data'
-import { uploadDocument, listDocuments, listReports, getReport, generateReport } from '@/lib/api'
-import type { WorkflowId, ApiDocument, ApiReport, ApiReportDetail, ReportFinding, DocumentStatus, ReportStatus } from '@/lib/types'
+import { requestUploadUrls, uploadToS3, confirmUpload, listDocuments, listReports, getReport, generateReport } from '@/lib/api'
+import type { WorkflowId, ApiDocument, ApiReport, ApiReportDetail, ApiUploadUrlResponse, ReportFinding, DocumentStatus, ReportStatus } from '@/lib/types'
 import {
   ShieldIcon,
   DiceIcon,
@@ -207,8 +207,13 @@ export default function WorkflowsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingReports, setIsLoadingReports] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
+  const [uploadErrors, setUploadErrors] = useState<string[]>([])
+  const [uploadProgress, setUploadProgress] = useState<{
+    phase: 'requesting' | 'uploading' | 'confirming'
+    fileIndex: number
+    total: number
+    s3Percent: number
+  } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('All Status')
   const [isDragging, setIsDragging] = useState(false)
@@ -271,24 +276,68 @@ export default function WorkflowsPage() {
     async (incoming: File[], batchName: string, batchDescription: string) => {
       if (incoming.length === 0) return
       const files = incoming.slice(0, UPLOAD_MAX)
+      const errors: string[] = []
 
       setIsUploading(true)
-      setUploadError(null)
-      setUploadProgress({ done: 0, total: files.length })
+      setUploadErrors([])
+      setUploadProgress({ phase: 'requesting', fileIndex: 0, total: files.length, s3Percent: 0 })
 
-      for (let i = 0; i < files.length; i++) {
-        try {
-          const result = await uploadDocument(files[i], batchName, batchDescription)
-          setDocuments((prev) => {
-            const newIds = new Set(result.documents.map((d) => d.id))
-            return [...result.documents, ...prev.filter((d) => !newIds.has(d.id))]
-          })
-        } catch (err) {
-          setUploadError(`Failed to upload "${files[i].name}": ${err instanceof Error ? err.message : 'Unknown error'}`)
-        }
-        setUploadProgress({ done: i + 1, total: files.length })
+      // Step 1: request presigned URLs for all files
+      let presignedResponse: ApiUploadUrlResponse
+      try {
+        presignedResponse = await requestUploadUrls(files, batchName, batchDescription)
+      } catch (err) {
+        setUploadErrors([`Failed to request upload URLs: ${err instanceof Error ? err.message : 'Unknown error'}`])
+        setIsUploading(false)
+        setUploadProgress(null)
+        return
       }
 
+      for (const f of presignedResponse.failed) {
+        errors.push(`"${f.filename}": ${f.error}`)
+      }
+
+      const fileByName = new Map<string, File>()
+      for (const file of files) {
+        if (!fileByName.has(file.name)) fileByName.set(file.name, file)
+      }
+
+      const uploadedDocs: ApiDocument[] = []
+      const total = presignedResponse.documents.length
+
+      for (let i = 0; i < total; i++) {
+        const { uploadUrl, document } = presignedResponse.documents[i]
+        const file = fileByName.get(document.originalName) ?? files[i]
+
+        // Step 2: PUT file bytes directly to S3
+        setUploadProgress({ phase: 'uploading', fileIndex: i, total, s3Percent: 0 })
+        try {
+          await uploadToS3(uploadUrl, file, document.mimeType, (percent) => {
+            setUploadProgress({ phase: 'uploading', fileIndex: i, total, s3Percent: percent })
+          })
+        } catch (err) {
+          errors.push(`"${document.originalName}": ${err instanceof Error ? err.message : 'Upload failed'}`)
+          continue
+        }
+
+        // Step 3: confirm upload so backend verifies S3 and starts parsing
+        setUploadProgress({ phase: 'confirming', fileIndex: i, total, s3Percent: 100 })
+        try {
+          await confirmUpload(document.id)
+          uploadedDocs.push(document)
+        } catch (err) {
+          errors.push(`"${document.originalName}": ${err instanceof Error ? err.message : 'Confirm failed'}`)
+        }
+      }
+
+      if (uploadedDocs.length > 0) {
+        setDocuments((prev) => {
+          const newIds = new Set(uploadedDocs.map((d) => d.id))
+          return [...uploadedDocs, ...prev.filter((d) => !newIds.has(d.id))]
+        })
+      }
+
+      setUploadErrors(errors)
       setIsUploading(false)
       setUploadProgress(null)
       await fetchDocuments()
@@ -658,12 +707,18 @@ export default function WorkflowsPage() {
           {isUploading && uploadProgress ? (
             <>
               <p className="text-sm text-slate-600 font-medium">
-                Uploading {uploadProgress.done}/{uploadProgress.total}…
+                {uploadProgress.phase === 'requesting' && 'Requesting upload URLs…'}
+                {uploadProgress.phase === 'uploading' && `Uploading ${uploadProgress.fileIndex + 1}/${uploadProgress.total} — ${uploadProgress.s3Percent}%`}
+                {uploadProgress.phase === 'confirming' && `Confirming ${uploadProgress.fileIndex + 1}/${uploadProgress.total}…`}
               </p>
               <div className="mt-3 w-48 h-1.5 bg-slate-200 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-indigo-500 rounded-full transition-all"
-                  style={{ width: `${(uploadProgress.done / uploadProgress.total) * 100}%` }}
+                  style={{
+                    width: uploadProgress.phase === 'requesting'
+                      ? '2%'
+                      : `${Math.round(((uploadProgress.fileIndex * 100 + uploadProgress.s3Percent) / (uploadProgress.total * 100)) * 100)}%`
+                  }}
                 />
               </div>
             </>
@@ -684,8 +739,12 @@ export default function WorkflowsPage() {
           onChange={handleFileInput}
           className="hidden"
         />
-        {uploadError && (
-          <p className="mt-2 text-xs text-red-600">{uploadError}</p>
+        {uploadErrors.length > 0 && (
+          <div className="mt-2 space-y-0.5">
+            {uploadErrors.map((err, i) => (
+              <p key={i} className="text-xs text-red-600">{err}</p>
+            ))}
+          </div>
         )}
       </div>
 

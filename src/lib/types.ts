@@ -31,10 +31,15 @@ export interface ApiDocument {
   createdAt: string
 }
 
-export interface ApiUploadResponse {
+export interface ApiPresignedDocument {
+  uploadUrl: string
+  document: ApiDocument
+}
+
+export interface ApiUploadUrlResponse {
   batch: ApiBatch | null
-  documents: ApiDocument[]
-  failed: string[]
+  documents: ApiPresignedDocument[]
+  failed: { filename: string; error: string }[]
 }
 
 export interface ApiListResponse {
