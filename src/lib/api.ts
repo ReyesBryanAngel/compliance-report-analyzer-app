@@ -1,16 +1,9 @@
 import type { ApiDocument, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse } from './types'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3000/api/v1'
-
-const LOGIN_EMAIL = process.env.NEXT_PUBLIC_AUTH_EMAIL ?? 'angelbryanreyes07@gmail.com'
-const LOGIN_PASSWORD = process.env.NEXT_PUBLIC_AUTH_PASSWORD ?? 'Toshiba_25'
-
+// const API_BASE = process.env.NEXT_PUBLIC_API_URL!
+const API_BASE = 'http://127.0.0.1:3000/api/v1'
 async function login(): Promise<string> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: LOGIN_EMAIL, password: LOGIN_PASSWORD }),
-  })
+  const res = await fetch('/api/auth/login', { method: 'POST' })
   if (!res.ok) throw new Error(`Login failed (${res.status})`)
   const data = await res.json() as { token: string }
   if (typeof window !== 'undefined') localStorage.setItem('token', data.token)
