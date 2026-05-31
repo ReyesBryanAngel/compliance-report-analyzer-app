@@ -1,7 +1,6 @@
 import type { ApiDocument, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse } from './types'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL!
-// const API_BASE = 'http://127.0.0.1:3000/api/v1'
+const API_BASE = '/api/backend'
 async function login(): Promise<string> {
   const res = await fetch('/api/auth/login', { method: 'POST' })
   if (!res.ok) throw new Error(`Login failed (${res.status})`)

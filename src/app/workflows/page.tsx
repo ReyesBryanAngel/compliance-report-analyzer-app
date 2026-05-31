@@ -270,14 +270,22 @@ export default function WorkflowsPage() {
   }, [])
 
   useEffect(() => {
-    setIsLoading(true)
-    fetchDocuments().finally(() => setIsLoading(false))
-  }, [fetchDocuments])
+    let cancelled = false
+    listDocuments()
+      .then(docs => { if (!cancelled) setDocuments(docs) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setIsLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
-    setIsLoadingReports(true)
-    fetchReports().finally(() => setIsLoadingReports(false))
-  }, [fetchReports])
+    let cancelled = false
+    listReports(WORKFLOW_API_CODE[selectedWorkflow])
+      .then(data => { if (!cancelled) setReports(data) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setIsLoadingReports(false) })
+    return () => { cancelled = true }
+  }, [selectedWorkflow])
 
   const handleFiles = useCallback(
     async (incoming: File[], batchName: string, batchDescription: string) => {
@@ -713,7 +721,7 @@ export default function WorkflowsPage() {
           return (
             <button
               key={workflow.id}
-              onClick={() => setSelectedWorkflow(workflow.id)}
+              onClick={() => { setSelectedWorkflow(workflow.id); setIsLoadingReports(true) }}
               className={`text-left bg-white rounded-xl border-2 p-5 transition-colors ${
                 isSelected ? colors.border : 'border-slate-200 hover:border-slate-300'
               }`}
