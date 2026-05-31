@@ -14,6 +14,7 @@ import {
   ChevronDownIcon,
   FileTextIcon,
   UploadIcon,
+  RefreshIcon,
 } from '@/components/icons'
 
 const UPLOAD_MAX = 10
@@ -234,6 +235,7 @@ export default function WorkflowsPage() {
   const [selectedWorkflowsForReport, setSelectedWorkflowsForReport] = useState<Set<string>>(new Set())
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -412,6 +414,19 @@ export default function WorkflowsPage() {
       return next
     })
   }, [])
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      if (activeTab === 'file-processing') {
+        await fetchDocuments()
+      } else {
+        await fetchReports()
+      }
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [activeTab, fetchDocuments, fetchReports])
 
   const handleGenerateReportSubmit = useCallback(async () => {
     setIsGenerating(true)
@@ -807,7 +822,10 @@ export default function WorkflowsPage() {
             </button>
           </div>
           <button
-            onClick={() => setShowGenerateModal(true)}
+            onClick={() => {
+              setSelectedWorkflowsForReport(new Set([WORKFLOW_API_CODE[selectedWorkflow]]))
+              setShowGenerateModal(true)
+            }}
             disabled={selectedDocumentIds.size === 0}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
@@ -842,6 +860,14 @@ export default function WorkflowsPage() {
             </select>
             <ChevronDownIcon className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
           </div>
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh"
+            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshIcon className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
         </div>
 
         {/* File Processing table */}
