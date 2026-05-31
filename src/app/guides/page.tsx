@@ -369,37 +369,37 @@ const workflows: Workflow[] = [
           },
         ],
       },
-      {
-        id: 11,
-        slug: 'geographic-risk-scoring',
-        title: 'geographic-risk-scoring',
-        subtitle: 'Weighted Geographic Exposure',
-        sections: [
-          {
-            title: 'Purpose',
-            content:
-              'Provide a nuanced, weighted geographic risk score — not just a count of risky jurisdictions, but a measure of how much of the total transaction value flows through them. A small number of large transactions to a risky country is more dangerous than many trivial ones.',
-          },
-          {
-            title: 'How It Works — Three Phases',
-            content:
-              'Phase 1 — FATF Blacklist: Same immediate escalation as cross-border — any qualifying transaction linked to a blacklisted country returns triggered, high, score 100.\n\nPhase 2 — Weighted exposure ratio: For each transaction linked to an elevated-risk jurisdiction, its amount is multiplied by a tier weight:',
-            table: {
-              headers: ['Tier', 'Weight'],
-              rows: [
-                { cells: ['FATF Greylist', '0.6'] },
-                { cells: ['Offshore Haven', '0.4'] },
-                { cells: ['EU Tax Blacklist', '0.3'] },
-              ],
-            },
-          },
-          {
-            title: '',
-            content:
-              'The exposure ratio = sum(amount × weight) / total transaction value.\n\nPhase 3 — Dual signal severity: Severity is the worst of two independent signals: (1) the exposure ratio vs. exposureGreenRatio/exposureAmberRatio, and (2) the count of distinct elevated-risk jurisdictions vs. greenMax/amberMax. Either signal alone can push severity to high.',
-          },
-        ],
-      },
+      // {
+      //   id: 11,
+      //   slug: 'geographic-risk-scoring',
+      //   title: 'geographic-risk-scoring',
+      //   subtitle: 'Weighted Geographic Exposure',
+      //   sections: [
+      //     {
+      //       title: 'Purpose',
+      //       content:
+      //         'Provide a nuanced, weighted geographic risk score — not just a count of risky jurisdictions, but a measure of how much of the total transaction value flows through them. A small number of large transactions to a risky country is more dangerous than many trivial ones.',
+      //     },
+      //     {
+      //       title: 'How It Works — Three Phases',
+      //       content:
+      //         'Phase 1 — FATF Blacklist: Same immediate escalation as cross-border — any qualifying transaction linked to a blacklisted country returns triggered, high, score 100.\n\nPhase 2 — Weighted exposure ratio: For each transaction linked to an elevated-risk jurisdiction, its amount is multiplied by a tier weight:',
+      //       table: {
+      //         headers: ['Tier', 'Weight'],
+      //         rows: [
+      //           { cells: ['FATF Greylist', '0.6'] },
+      //           { cells: ['Offshore Haven', '0.4'] },
+      //           { cells: ['EU Tax Blacklist', '0.3'] },
+      //         ],
+      //       },
+      //     },
+      //     {
+      //       title: '',
+      //       content:
+      //         'The exposure ratio = sum(amount × weight) / total transaction value.\n\nPhase 3 — Dual signal severity: Severity is the worst of two independent signals: (1) the exposure ratio vs. exposureGreenRatio/exposureAmberRatio, and (2) the count of distinct elevated-risk jurisdictions vs. greenMax/amberMax. Either signal alone can push severity to high.',
+      //     },
+      //   ],
+      // },
       {
         id: 12,
         slug: 'sanctions-watchlist',
