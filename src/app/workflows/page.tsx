@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { WORKFLOWS } from '@/lib/data'
 import { requestUploadUrls, uploadToS3, confirmUpload, listDocuments, listReports, getReport, generateReport } from '@/lib/api'
-import type { WorkflowId, ApiDocument, ApiReport, ApiReportDetail, ApiUploadUrlResponse, ReportFinding, DocumentStatus, ReportStatus } from '@/lib/types'
+import type { WorkflowId, ApiDocument, ApiReport, ApiReportDetail, ApiUploadUrlResponse, ReportFinding, DocumentStatus, ReportStatus, NarrativeFindingExplanation } from '@/lib/types'
 import {
   ShieldIcon,
   DiceIcon,
@@ -76,7 +76,7 @@ const SEVERITY_BADGE: Record<string, string> = {
 
 const EVIDENCE_PAGE_SIZE = 10
 
-function FindingCard({ finding }: { finding: ReportFinding }) {
+function FindingCard({ finding, narrativeExplanation }: { finding: ReportFinding; narrativeExplanation?: NarrativeFindingExplanation }) {
   const [expanded, setExpanded] = useState(false)
   const [page, setPage] = useState(0)
 
@@ -99,7 +99,12 @@ function FindingCard({ finding }: { finding: ReportFinding }) {
               {finding.triggered ? 'Triggered' : 'Clear'}
             </span>
           </div>
-          <p className="text-xs text-slate-600 leading-relaxed">{finding.reason}</p>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            {narrativeExplanation?.explanation ?? finding.reason}
+          </p>
+          {narrativeExplanation && (
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">{finding.reason}</p>
+          )}
         </div>
         <div className="text-right flex-shrink-0">
           <p className={`text-xl font-bold ${finding.score >= 70 ? 'text-red-600' : finding.score >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
@@ -604,7 +609,7 @@ export default function WorkflowsPage() {
               {reportDetail && (
                 <>
                   {/* Summary cards */}
-                  <div className="grid grid-cols-5 gap-3 mb-6">
+                  <div className="grid grid-cols-4 gap-3 mb-6">
                     <div className={`rounded-xl p-4 text-center ${reportDetail.summary.overallRiskScore >= 70 ? 'bg-red-50' : reportDetail.summary.overallRiskScore >= 40 ? 'bg-amber-50' : 'bg-emerald-50'}`}>
                       <p className={`text-2xl font-bold ${reportDetail.summary.overallRiskScore >= 70 ? 'text-red-600' : reportDetail.summary.overallRiskScore >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
                         {reportDetail.summary.overallRiskScore}
@@ -615,10 +620,10 @@ export default function WorkflowsPage() {
                       <p className="text-2xl font-bold text-slate-800">{reportDetail.summary.totalTransactions}</p>
                       <p className="text-xs text-slate-500 mt-0.5">Transactions</p>
                     </div>
-                    <div className="bg-slate-50 rounded-xl p-4 text-center">
+                    {/* <div className="bg-slate-50 rounded-xl p-4 text-center">
                       <p className="text-2xl font-bold text-slate-800">{reportDetail.summary.totalDocuments}</p>
                       <p className="text-xs text-slate-500 mt-0.5">Documents</p>
-                    </div>
+                    </div> */}
                     <div className="bg-amber-50 rounded-xl p-4 text-center">
                       <p className="text-2xl font-bold text-amber-600">{reportDetail.summary.triggeredChecks}</p>
                       <p className="text-xs text-slate-500 mt-0.5">Triggered Checks</p>
@@ -629,26 +634,51 @@ export default function WorkflowsPage() {
                     </div>
                   </div>
 
-                  {/* Findings per workflow */}
-                  {reportDetail.results.map((result) => (
-                    <div key={result.workflow} className="mb-6">
-                      <div className="flex items-center gap-3 mb-4">
-                        <span className="px-2.5 py-1 text-xs font-bold bg-slate-800 text-white rounded-md uppercase tracking-wider">
-                          {result.workflow}
-                        </span>
-                        <span className="text-sm text-slate-500">Overall Score:</span>
-                        <span className={`text-sm font-semibold ${result.overallScore >= 70 ? 'text-red-600' : result.overallScore >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                          {result.overallScore} / 100
-                        </span>
-                      </div>
-
-                      <div className="space-y-4">
-                        {result.findings.map((finding) => (
-                          <FindingCard key={finding.checkpoint} finding={finding} />
-                        ))}
-                      </div>
+                  {/* Executive summary */}
+                  {reportDetail.narrative?.executiveSummary && (
+                    <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Executive Summary</p>
+                      <p className="text-sm text-slate-700 leading-relaxed">{reportDetail.narrative.executiveSummary}</p>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Findings per workflow */}
+                  {reportDetail.results.map((result) => {
+                    const explanationMap = Object.fromEntries(
+                      (reportDetail.narrative?.findingExplanations ?? []).map((e) => [e.checkpoint, e])
+                    )
+                    return (
+                      <div key={result.workflow} className="mb-6">
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="px-2.5 py-1 text-xs font-bold bg-slate-800 text-white rounded-md uppercase tracking-wider">
+                            {result.workflow}
+                          </span>
+                          <span className="text-sm text-slate-500">Overall Score:</span>
+                          <span className={`text-sm font-semibold ${result.overallScore >= 70 ? 'text-red-600' : result.overallScore >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {result.overallScore} / 100
+                          </span>
+                        </div>
+
+                        <div className="space-y-4">
+                          {result.findings.map((finding) => (
+                            <FindingCard
+                              key={finding.checkpoint}
+                              finding={finding}
+                              narrativeExplanation={explanationMap[finding.checkpoint]}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Reviewer notes */}
+                  {reportDetail.narrative?.reviewerNotes && (
+                    <div className="mt-2 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">Reviewer Notes</p>
+                      <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-line">{reportDetail.narrative.reviewerNotes}</p>
+                    </div>
+                  )}
                 </>
               )}
             </div>

@@ -138,6 +138,17 @@ export interface ReportSummary {
   highRiskFindings: number
 }
 
+export interface NarrativeFindingExplanation {
+  checkpoint: string
+  explanation: string
+}
+
+export interface ReportNarrative {
+  executiveSummary: string
+  findingExplanations: NarrativeFindingExplanation[]
+  reviewerNotes: string
+}
+
 export interface ApiReportDetail {
   id: string
   title: string
@@ -147,5 +158,6 @@ export interface ApiReportDetail {
   results: ReportResult[]
   checks: ReportCheck[]
   summary: ReportSummary
+  narrative?: ReportNarrative
   createdAt: string
 }
