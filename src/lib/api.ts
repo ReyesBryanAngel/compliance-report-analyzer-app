@@ -2,11 +2,38 @@ import type { ApiDocument, ApiListResponse, ApiReport, ApiReportDetail, ApiRepor
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:3000/api/v1'
 
-const FALLBACK_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4Y2QxYWVlOC0wMmZiLTRlMzEtYmE2Ni02YWVjZTc2MzA3YzUiLCJvcmdhbml6YXRpb25JZCI6ImY4ODE1MzJhLTg4YzMtNDhjNi1hZTE5LWRiYWY3Nzk4NDRkYiIsImVtYWlsIjoiYW5nZWxicnlhbnJleWVzMDdAZ21haWwuY29tIiwiaWF0IjoxNzc5MjA4NTk3LCJleHAiOjE3Nzk4MTMzOTd9.Ho32E90VAlDbH6FMxsIWEY4t8dbEFTyeRGu3LINroUQ'
+const LOGIN_EMAIL = process.env.NEXT_PUBLIC_AUTH_EMAIL ?? 'angelbryanreyes07@gmail.com'
+const LOGIN_PASSWORD = process.env.NEXT_PUBLIC_AUTH_PASSWORD ?? 'Toshiba_25'
 
-function getAuthHeader() {
-  const token = (typeof window !== 'undefined' && localStorage.getItem('token')) || FALLBACK_TOKEN
-  return { Authorization: `Bearer ${token}` }
+async function login(): Promise<string> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: LOGIN_EMAIL, password: LOGIN_PASSWORD }),
+  })
+  if (!res.ok) throw new Error(`Login failed (${res.status})`)
+  const data = await res.json() as { token: string }
+  if (typeof window !== 'undefined') localStorage.setItem('token', data.token)
+  return data.token
+}
+
+function getToken(): string | null {
+  return typeof window !== 'undefined' ? localStorage.getItem('token') : null
+}
+
+async function fetchWithAuth(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+  let token = getToken()
+  if (!token) token = await login()
+
+  const makeRequest = (t: string) =>
+    fetch(input, { ...init, headers: { ...init.headers, Authorization: `Bearer ${t}` } })
+
+  const res = await makeRequest(token)
+  if (res.status !== 401) return res
+
+  // Token expired — re-login and retry once
+  token = await login()
+  return makeRequest(token)
 }
 
 export async function requestUploadUrls(
@@ -14,9 +41,9 @@ export async function requestUploadUrls(
   batchName: string,
   batchDescription: string,
 ): Promise<ApiUploadUrlResponse> {
-  const res = await fetch(`${API_BASE}/documents/upload-url`, {
+  const res = await fetchWithAuth(`${API_BASE}/documents/upload-url`, {
     method: 'POST',
-    headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       files: files.map((f) => ({ filename: f.name })),
       batchName,
@@ -61,15 +88,12 @@ export function uploadToS3(
 }
 
 export async function confirmUpload(documentId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/documents/${documentId}/confirm`, {
-    method: 'POST',
-    headers: getAuthHeader(),
-  })
+  const res = await fetchWithAuth(`${API_BASE}/documents/${documentId}/confirm`, { method: 'POST' })
   if (!res.ok) throw new Error(`Confirm upload failed (${res.status})`)
 }
 
 export async function listDocuments(): Promise<ApiDocument[]> {
-  const res = await fetch(`${API_BASE}/documents/list`, { headers: getAuthHeader() })
+  const res = await fetchWithAuth(`${API_BASE}/documents/list`)
   if (!res.ok) throw new Error(`List failed (${res.status})`)
   const data = (await res.json()) as ApiListResponse
   return data.documents
@@ -77,22 +101,22 @@ export async function listDocuments(): Promise<ApiDocument[]> {
 
 export async function listReports(workflow?: string): Promise<ApiReport[]> {
   const url = workflow ? `${API_BASE}/reports/list?workflow=${encodeURIComponent(workflow)}` : `${API_BASE}/reports/list`
-  const res = await fetch(url, { headers: getAuthHeader() })
+  const res = await fetchWithAuth(url)
   if (!res.ok) throw new Error(`List reports failed (${res.status})`)
   const data = (await res.json()) as ApiReportsListResponse
   return data.reports
 }
 
 export async function getReport(id: string): Promise<ApiReportDetail> {
-  const res = await fetch(`${API_BASE}/reports/${id}`, { headers: getAuthHeader() })
+  const res = await fetchWithAuth(`${API_BASE}/reports/${id}`)
   if (!res.ok) throw new Error(`Get report failed (${res.status})`)
   return res.json() as Promise<ApiReportDetail>
 }
 
 export async function generateReport(workflows: string[], documentIds: string[]): Promise<void> {
-  const res = await fetch(`${API_BASE}/reports/generate`, {
+  const res = await fetchWithAuth(`${API_BASE}/reports/generate`, {
     method: 'POST',
-    headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workflows, document_ids: documentIds }),
   })
   if (!res.ok) throw new Error(`Generate report failed (${res.status})`)

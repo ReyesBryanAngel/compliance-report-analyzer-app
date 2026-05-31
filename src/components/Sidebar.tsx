@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboardIcon, WorkflowNavIcon, ArchitectureNavIcon } from './icons'
+import { LayoutDashboardIcon, WorkflowNavIcon, ArchitectureNavIcon, BookOpenIcon } from './icons'
 
 const navItems = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboardIcon },
   { href: '/workflows', label: 'Workflows', Icon: WorkflowNavIcon },
   { href: '/architecture', label: 'Architecture', Icon: ArchitectureNavIcon },
+  { href: '/guides', label: 'Guides', Icon: BookOpenIcon },
 ]
 
 export default function Sidebar() {
