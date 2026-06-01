@@ -1,4 +1,4 @@
-import type { ApiDocument, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse } from './types'
+import type { ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse } from './types'
 
 const API_BASE = '/api/backend'
 async function login(): Promise<string> {
@@ -79,9 +79,17 @@ export function uploadToS3(
   })
 }
 
-export async function confirmUpload(documentId: string): Promise<void> {
+export async function confirmUpload(documentId: string): Promise<{ message: string }> {
   const res = await fetchWithAuth(`${API_BASE}/documents/${documentId}/confirm`, { method: 'POST' })
   if (!res.ok) throw new Error(`Confirm upload failed (${res.status})`)
+  const data = await res.json() as { code: number; status: string; message: string }
+  return { message: data.message }
+}
+
+export async function getDocument(id: string): Promise<ApiDocumentDetail> {
+  const res = await fetchWithAuth(`${API_BASE}/documents/${id}`)
+  if (!res.ok) throw new Error(`Get document failed (${res.status})`)
+  return res.json() as Promise<ApiDocumentDetail>
 }
 
 export async function listDocuments(): Promise<ApiDocument[]> {
@@ -105,11 +113,13 @@ export async function getReport(id: string): Promise<ApiReportDetail> {
   return res.json() as Promise<ApiReportDetail>
 }
 
-export async function generateReport(workflows: string[], documentIds: string[]): Promise<void> {
+export async function generateReport(workflows: string[], documentIds: string[]): Promise<{ message: string }> {
   const res = await fetchWithAuth(`${API_BASE}/reports/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workflows, document_ids: documentIds }),
   })
   if (!res.ok) throw new Error(`Generate report failed (${res.status})`)
+  const data = await res.json() as { code: number; status: string; message: string }
+  return { message: data.message }
 }

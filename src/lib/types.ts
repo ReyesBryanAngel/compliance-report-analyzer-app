@@ -31,6 +31,22 @@ export interface ApiDocument {
   createdAt: string
 }
 
+export interface ParsedTransaction {
+  date: string
+  amount: string
+  balance: string
+  channel: string
+  category?: string
+  direction: 'inflow' | 'outflow'
+  description: string
+  beneficiaryId?: string
+}
+
+export interface ApiDocumentDetail extends ApiDocument {
+  downloadUrl: string | null
+  parsedData: ParsedTransaction[] | null
+}
+
 export interface ApiPresignedDocument {
   uploadUrl: string
   document: ApiDocument
