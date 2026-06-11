@@ -176,6 +176,71 @@ const workflows: Workflow[] = [
           },
         ],
       },
+      {
+        id: 21,
+        slug: 'source-of-funds',
+        title: 'source-of-funds',
+        subtitle: 'Know Your Customer — Inflow Origin Verification',
+        sections: [
+          {
+            title: 'Purpose',
+            content:
+              'Verify that incoming funds (deposits) have an identifiable, legitimate origin. A bank account where a large share of inflows cannot be traced to a known source — salary, remittance, business income, loan proceeds, etc. — is a core AML/KYC red flag, potentially indicating undisclosed income, third-party funding, or proceeds of crime being funneled through the account.',
+          },
+          {
+            title: 'How It Works',
+            content:
+              'All inflow transactions are summed to get totalInflowAmount. If this total is below minTotalInflow (default ₱10,000), there isn\'t enough data to assess — the checkpoint returns not triggered, low, score 0 ("insufficient inflow data").\n\nEach inflow is then classified as explained or unexplained:\n\n• Explained by category — the parser already tagged it as salary, transfer, interest_income, or loan_payment.\n• Explained by description keywords — matches one of several pattern groups (see below).\n• Anything matching neither is unexplained.',
+          },
+          {
+            title: 'Explained Description Keyword Groups',
+            content: '',
+            table: {
+              headers: ['Category', 'Keywords'],
+              rows: [
+                { cells: ['Employment income', 'salary, payroll, sweldo, wages, stipend, remuneration, compensation'] },
+                { cells: ['Government benefits', 'GSIS, SSS benefit, pension, 4Ps, DSWD, Pag-IBIG benefit, PhilHealth benefit'] },
+                { cells: ['Overseas remittance', 'remittance, padala, Western Union, MoneyGram, Wise, Xoom, Ria Money, OFW, forex receipt'] },
+                { cells: ['Business/freelance income', 'invoice, collection, receivable, payment received, freelance, professional fee, consultation fee, service fee, sales proceed'] },
+                { cells: ['Investment/passive income', 'interest, dividend, investment return, stock proceed, redemption, maturity proceed'] },
+                { cells: ['Refunds and reversals', 'refund, reversal, chargeback, reimbursement, rebate, cashback'] },
+                { cells: ['Rental income', 'rental income, rent received, landlord payment'] },
+                { cells: ['Intra-bank/own-account transfers', 'fund transfer, InstaPay, PESONet, RTGS, own account, inter-bank, SWIFT receipt'] },
+                { cells: ['Loan proceeds', 'loan proceed, loan release, loan disbursement, credit proceed'] },
+              ],
+            },
+          },
+          {
+            title: '',
+            content:
+              'Two independent metrics are then computed from the unexplained inflows:\n\n1. Unexplained ratio = unexplained inflow amount / total inflow amount\n2. Large unexplained deposit count = number of unexplained inflows with amount ≥ largeDepositFloor (default ₱50,000)\n\nThe final severity is the worse of the two signals — either a high unexplained ratio or multiple large unexplained deposits independently elevates the risk level (same "worst-of" pattern used by geographic-risk-scoring).',
+          },
+          {
+            title: 'Decision Table by Ratio (and Large-deposit Count)',
+            content: '',
+            table: {
+              headers: ['Signal', 'Green (Low)', 'Amber (Medium)', 'Red (High)'],
+              rows: [
+                { cells: ['Unexplained inflow ratio', '≤ 20%', '≤ 50%', '> 50%'] },
+                { cells: ['Large unexplained deposits (≥ ₱50,000)', '0', '≤ 2', '> 2'] },
+              ],
+            },
+          },
+          {
+            title: 'Resulting Severity',
+            content: '',
+            table: {
+              headers: ['Resulting Level', 'Triggered', 'Severity', 'Score'],
+              rows: [
+                { cells: ['Low (both signals green)', 'No', 'Low', '10'] },
+                { cells: ['Medium (either signal amber, neither red)', 'Yes', 'Medium', '55'] },
+                { cells: ['High (either signal red)', 'Yes', 'High', '85'] },
+              ],
+            },
+            note: 'Evidence: all unexplained inflow transactions. Reason string examples — Triggered: "Source of funds unclear — 62% of inflows (PHP 185,000.00) have no identifiable source; 3 large deposits ≥ PHP 50,000 unexplained". Not triggered: "Source of funds adequate — only 8% of inflows (PHP 12,000.00) are unclassified".',
+          },
+        ],
+      },
     ],
   },
   {
