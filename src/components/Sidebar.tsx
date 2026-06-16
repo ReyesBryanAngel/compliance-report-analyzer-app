@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { LayoutDashboardIcon, WorkflowNavIcon, ArchitectureNavIcon, BookOpenIcon } from './icons'
+import { LayoutDashboardIcon, WorkflowNavIcon, ArchitectureNavIcon, BookOpenIcon, SettingsIcon } from './icons'
 
 const navItems = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboardIcon },
   { href: '/workflows', label: 'Workflows', Icon: WorkflowNavIcon },
   { href: '/architecture', label: 'Architecture', Icon: ArchitectureNavIcon },
   { href: '/guides', label: 'Guides', Icon: BookOpenIcon },
+  { href: '/settings', label: 'Settings', Icon: SettingsIcon },
 ]
 
 function ChevronLeftIcon({ className }: { className?: string }) {

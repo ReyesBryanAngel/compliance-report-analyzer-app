@@ -1,6 +1,7 @@
-import type { ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse } from './types'
+import type { ActiveInstructionResponse, ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse, InstructionItem, WorkflowConfigItem } from './types'
 
 const API_BASE = '/api/backend'
+// const API_BASE = 'http://127.0.0.1:3001/api/v1'
 async function login(): Promise<string> {
   const res = await fetch('/api/auth/login', { method: 'POST' })
   if (!res.ok) throw new Error(`Login failed (${res.status})`)
@@ -122,4 +123,77 @@ export async function generateReport(workflows: string[], documentIds: string[])
   if (!res.ok) throw new Error(`Generate report failed (${res.status})`)
   const data = await res.json() as { code: number; status: string; message: string }
   return { message: data.message }
+}
+
+export function getOrganizationId(): string | null {
+  const token = getToken()
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) as Record<string, unknown>
+    return (payload.organizationId as string) ?? null
+  } catch {
+    return null
+  }
+}
+
+// Workflow config
+
+export async function getWorkflowConfigs(): Promise<WorkflowConfigItem[]> {
+  const res = await fetchWithAuth(`${API_BASE}/workflow-config`)
+  if (!res.ok) throw new Error(`Get workflow configs failed (${res.status})`)
+  const data = await res.json() as { configs: WorkflowConfigItem[] }
+  return data.configs
+}
+
+export async function setWorkflowConfig(workflow: string, mode: 'checkpoints' | 'agent_skill'): Promise<WorkflowConfigItem> {
+  const res = await fetchWithAuth(`${API_BASE}/workflow-config/${encodeURIComponent(workflow)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  })
+  if (!res.ok) throw new Error(`Set workflow config failed (${res.status})`)
+  return res.json() as Promise<WorkflowConfigItem>
+}
+
+export async function resetWorkflowConfig(workflow: string): Promise<WorkflowConfigItem> {
+  const res = await fetchWithAuth(`${API_BASE}/workflow-config/${encodeURIComponent(workflow)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Reset workflow config failed (${res.status})`)
+  return res.json() as Promise<WorkflowConfigItem>
+}
+
+// SME instructions
+
+export async function listInstructions(workflow: string): Promise<InstructionItem[]> {
+  const res = await fetchWithAuth(`${API_BASE}/workflows/${encodeURIComponent(workflow)}/instructions`)
+  if (!res.ok) throw new Error(`List instructions failed (${res.status})`)
+  const data = await res.json() as { instructions: InstructionItem[] }
+  return data.instructions
+}
+
+export async function getActiveInstruction(workflow: string): Promise<ActiveInstructionResponse> {
+  const res = await fetchWithAuth(`${API_BASE}/workflows/${encodeURIComponent(workflow)}/instructions/active`)
+  if (!res.ok) throw new Error(`Get active instruction failed (${res.status})`)
+  return res.json() as Promise<ActiveInstructionResponse>
+}
+
+export async function createInstruction(workflow: string, title: string | undefined, content: string): Promise<InstructionItem> {
+  const res = await fetchWithAuth(`${API_BASE}/workflows/${encodeURIComponent(workflow)}/instructions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: title || undefined, content }),
+  })
+  if (!res.ok) throw new Error(`Create instruction failed (${res.status})`)
+  return res.json() as Promise<InstructionItem>
+}
+
+export async function activateInstruction(workflow: string, id: string): Promise<InstructionItem> {
+  const res = await fetchWithAuth(`${API_BASE}/workflows/${encodeURIComponent(workflow)}/instructions/${encodeURIComponent(id)}/activate`, { method: 'PATCH' })
+  if (!res.ok) throw new Error(`Activate instruction failed (${res.status})`)
+  return res.json() as Promise<InstructionItem>
+}
+
+export async function deleteInstruction(workflow: string, id: string): Promise<void> {
+  const res = await fetchWithAuth(`${API_BASE}/workflows/${encodeURIComponent(workflow)}/instructions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (res.status === 409) throw new Error('ACTIVE')
+  if (!res.ok) throw new Error(`Delete instruction failed (${res.status})`)
 }

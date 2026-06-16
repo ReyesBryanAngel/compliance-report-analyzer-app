@@ -1159,11 +1159,18 @@ export default function WorkflowsPage() {
                       </td>
                       <td className="px-5 py-3.5 text-slate-500">{formatDate(report.createdAt)}</td>
                       <td className="px-5 py-3.5">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${REPORT_STATUS_BADGE[report.status] ?? 'bg-slate-100 text-slate-600'}`}
-                        >
-                          {REPORT_STATUS_LABEL[report.status] ?? report.status}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${REPORT_STATUS_BADGE[report.status] ?? 'bg-slate-100 text-slate-600'}`}
+                          >
+                            {REPORT_STATUS_LABEL[report.status] ?? report.status}
+                          </span>
+                          {report.status === 'FAILED' && (
+                            <span className="text-xs text-slate-400 leading-snug max-w-[180px]">
+                              Check ANTHROPIC_API_KEY if using Agent Skill mode.
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3.5">
                         {report.summary?.severity ? (

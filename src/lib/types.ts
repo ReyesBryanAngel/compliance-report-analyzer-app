@@ -177,3 +177,29 @@ export interface ApiReportDetail {
   narrative?: ReportNarrative
   createdAt: string
 }
+
+export interface WorkflowConfigItem {
+  workflow: string
+  mode: 'checkpoints' | 'agent_skill'
+  isDefault: boolean
+  updatedAt: string | null
+}
+
+export interface InstructionItem {
+  id: string
+  workflow: string
+  scope: 'org' | 'global'
+  version: number
+  title: string | null
+  content: string
+  isActive: boolean
+  createdBy: { id: string; name: string | null; email: string } | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ActiveInstructionResponse {
+  source: 'org' | 'global' | 'built-in'
+  content: string
+  item: InstructionItem | null
+}
