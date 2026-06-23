@@ -217,16 +217,17 @@ export async function listWorkflowExecutions(params?: {
   cursor?: string
   limit?: number
 }): Promise<{ items: WorkflowExecutionSummary[]; nextCursor: string | null }> {
-  const url = new URL(`${API_BASE}/workflow-executions`)
-  if (params?.status) url.searchParams.set('status', params.status)
-  if (params?.workflowSlug) url.searchParams.set('workflowSlug', params.workflowSlug)
-  if (params?.mode) url.searchParams.set('mode', params.mode)
-  if (params?.reportId) url.searchParams.set('reportId', params.reportId)
-  if (params?.from) url.searchParams.set('from', params.from)
-  if (params?.to) url.searchParams.set('to', params.to)
-  if (params?.cursor) url.searchParams.set('cursor', params.cursor)
-  if (params?.limit) url.searchParams.set('limit', String(params.limit))
-  const res = await fetchWithAuth(url.toString())
+  const qs = new URLSearchParams()
+  if (params?.status) qs.set('status', params.status)
+  if (params?.workflowSlug) qs.set('workflowSlug', params.workflowSlug)
+  if (params?.mode) qs.set('mode', params.mode)
+  if (params?.reportId) qs.set('reportId', params.reportId)
+  if (params?.from) qs.set('from', params.from)
+  if (params?.to) qs.set('to', params.to)
+  if (params?.cursor) qs.set('cursor', params.cursor)
+  if (params?.limit) qs.set('limit', String(params.limit))
+  const query = qs.toString()
+  const res = await fetchWithAuth(`${API_BASE}/workflow-executions${query ? `?${query}` : ''}`)
   if (!res.ok) throw new Error(`List workflow executions failed (${res.status})`)
   return res.json() as Promise<{ items: WorkflowExecutionSummary[]; nextCursor: string | null }>
 }
