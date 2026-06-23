@@ -1,7 +1,7 @@
 import type { ActiveInstructionResponse, AgentConversation, AgentExecutionDetail, ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse, InstructionItem, WorkflowConfigItem, WorkflowExecutionSummary } from './types'
 
-const API_BASE = '/api/backend'
-// const API_BASE = 'http://127.0.0.1:3001/api/v1'
+export const API_BASE = '/api/backend'
+// export const API_BASE = 'http://127.0.0.1:3001/api/v1'
 async function login(): Promise<string> {
   const res = await fetch('/api/auth/login', { method: 'POST' })
   if (!res.ok) throw new Error(`Login failed (${res.status})`)
@@ -14,7 +14,7 @@ function getToken(): string | null {
   return typeof window !== 'undefined' ? localStorage.getItem('token') : null
 }
 
-async function fetchWithAuth(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+export async function fetchWithAuth(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
   let token = getToken()
   if (!token) token = await login()
 

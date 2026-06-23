@@ -18,8 +18,8 @@ import {
   EyeIcon,
   SparklesIcon,
 } from '@/components/icons'
+import { ReportConversationPanel } from '@/components/report-conversation/ReportConversationPanel'
 
-const UPLOAD_MAX = 10
 
 const workflowIconMap = {
   shield: ShieldIcon,
@@ -441,7 +441,7 @@ export default function WorkflowsPage() {
   const handleFiles = useCallback(
     async (incoming: File[], batchName: string, batchDescription: string) => {
       if (incoming.length === 0) return
-      const files = incoming.slice(0, UPLOAD_MAX)
+      const files = incoming
       const errors: string[] = []
 
       setIsUploading(true)
@@ -518,7 +518,7 @@ export default function WorkflowsPage() {
     if (files.length === 0) return
     const date = new Date()
     const defaultBatchName = `Batch-${date.toISOString().slice(0, 10).replace(/-/g, '')}-${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`
-    setPendingFiles(files.slice(0, UPLOAD_MAX))
+    setPendingFiles(files)
     setBatchName(defaultBatchName)
     setBatchDescription('')
   }, [])
@@ -982,6 +982,14 @@ export default function WorkflowsPage() {
                     </div>
                   )}
 
+                  {/* AI Conversation Panel */}
+                  <div className="mt-6 pt-6 border-t border-slate-200">
+                    <ReportConversationPanel
+                      reportId={reportDetail.id}
+                      reportStatus={reportDetail.status}
+                    />
+                  </div>
+
                   {/* Agent Runs */}
                   {(isLoadingExecutions || workflowExecutions.length > 0 || executionsError) && (
                     <div className="mt-6 pt-6 border-t border-slate-200">
@@ -1161,7 +1169,7 @@ export default function WorkflowsPage() {
       {/* File upload zone */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
         <p className="text-xs text-slate-500 mb-3">
-          Drag and drop files or click to browse (max {UPLOAD_MAX} files)
+          Drag and drop files or click to browse
         </p>
         <div
           onDragOver={handleDragOver}
