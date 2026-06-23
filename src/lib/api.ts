@@ -1,4 +1,4 @@
-import type { ActiveInstructionResponse, ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse, InstructionItem, WorkflowConfigItem } from './types'
+import type { ActiveInstructionResponse, AgentConversation, AgentExecutionDetail, ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse, InstructionItem, WorkflowConfigItem, WorkflowExecutionSummary } from './types'
 
 const API_BASE = '/api/backend'
 // const API_BASE = 'http://127.0.0.1:3001/api/v1'
@@ -196,4 +196,56 @@ export async function deleteInstruction(workflow: string, id: string): Promise<v
   const res = await fetchWithAuth(`${API_BASE}/workflows/${encodeURIComponent(workflow)}/instructions/${encodeURIComponent(id)}`, { method: 'DELETE' })
   if (res.status === 409) throw new Error('ACTIVE')
   if (!res.ok) throw new Error(`Delete instruction failed (${res.status})`)
+}
+
+// Workflow executions
+
+export async function getReportWorkflowExecutions(reportId: string): Promise<WorkflowExecutionSummary[]> {
+  const res = await fetchWithAuth(`${API_BASE}/reports/${reportId}/workflow-executions`)
+  if (!res.ok) throw new Error(`Get report workflow executions failed (${res.status})`)
+  const data = await res.json() as { executions: WorkflowExecutionSummary[] }
+  return data.executions
+}
+
+export async function listWorkflowExecutions(params?: {
+  status?: string
+  workflowSlug?: string
+  mode?: string
+  reportId?: string
+  from?: string
+  to?: string
+  cursor?: string
+  limit?: number
+}): Promise<{ items: WorkflowExecutionSummary[]; nextCursor: string | null }> {
+  const url = new URL(`${API_BASE}/workflow-executions`)
+  if (params?.status) url.searchParams.set('status', params.status)
+  if (params?.workflowSlug) url.searchParams.set('workflowSlug', params.workflowSlug)
+  if (params?.mode) url.searchParams.set('mode', params.mode)
+  if (params?.reportId) url.searchParams.set('reportId', params.reportId)
+  if (params?.from) url.searchParams.set('from', params.from)
+  if (params?.to) url.searchParams.set('to', params.to)
+  if (params?.cursor) url.searchParams.set('cursor', params.cursor)
+  if (params?.limit) url.searchParams.set('limit', String(params.limit))
+  const res = await fetchWithAuth(url.toString())
+  if (!res.ok) throw new Error(`List workflow executions failed (${res.status})`)
+  return res.json() as Promise<{ items: WorkflowExecutionSummary[]; nextCursor: string | null }>
+}
+
+export async function getWorkflowExecution(id: string): Promise<WorkflowExecutionSummary> {
+  const res = await fetchWithAuth(`${API_BASE}/workflow-executions/${id}`)
+  if (!res.ok) throw new Error(`Get workflow execution failed (${res.status})`)
+  return res.json() as Promise<WorkflowExecutionSummary>
+}
+
+export async function getWorkflowExecutionConversation(id: string): Promise<AgentConversation | null> {
+  const res = await fetchWithAuth(`${API_BASE}/workflow-executions/${id}/conversation`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`Get conversation failed (${res.status})`)
+  return res.json() as Promise<AgentConversation>
+}
+
+export async function getAgentExecution(id: string): Promise<AgentExecutionDetail> {
+  const res = await fetchWithAuth(`${API_BASE}/agent-executions/${id}`)
+  if (!res.ok) throw new Error(`Get agent execution failed (${res.status})`)
+  return res.json() as Promise<AgentExecutionDetail>
 }

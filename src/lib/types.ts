@@ -203,3 +203,48 @@ export interface ActiveInstructionResponse {
   content: string
   item: InstructionItem | null
 }
+
+export type WorkflowExecutionStatus = 'RUNNING' | 'COMPLETED' | 'FAILED'
+export type AgentMessageRole = 'SYSTEM' | 'USER' | 'ASSISTANT'
+
+export interface WorkflowExecutionSummary {
+  id: string
+  reportId: string
+  workflowSlug: string
+  mode: string
+  status: WorkflowExecutionStatus
+  overallScore: number | null
+  error: string | null
+  startedAt: string
+  completedAt: string | null
+}
+
+export interface AgentMessage {
+  id: string
+  role: AgentMessageRole
+  content: string
+  sequence: number
+  createdAt: string
+}
+
+export interface AgentExecutionDetail {
+  id: string
+  skillSlug: string
+  provider: string
+  model: string
+  sequence: number
+  status: WorkflowExecutionStatus
+  promptTokens: number
+  completionTokens: number
+  latencyMs: number
+  error: string | null
+  startedAt: string
+  completedAt: string | null
+  messages: AgentMessage[]
+}
+
+export interface AgentConversation {
+  id: string
+  workflowExecutionId: string
+  executions: AgentExecutionDetail[]
+}
