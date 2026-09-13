@@ -1,6 +1,6 @@
 export async function POST() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL
-  // const apiUrl = 'http://127.0.0.1:3000/api/v1'
+  // const apiUrl = process.env.NEXT_PUBLIC_API_URL
+  const apiUrl = 'http://127.0.0.1:3001/api/v1'
   const email = process.env.AUTH_EMAIL
   const password = process.env.AUTH_PASSWORD
 

@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { WORKFLOWS } from '@/lib/data'
-import { requestUploadUrls, uploadToS3, confirmUpload, listDocuments, listReports, getReport, generateReport, getDocument } from '@/lib/api'
-import type { WorkflowId, ApiDocument, ApiDocumentDetail, ApiReport, ApiReportDetail, ApiUploadUrlResponse, ReportFinding, DocumentStatus, ReportStatus, NarrativeFindingExplanation } from '@/lib/types'
+import { requestUploadUrls, uploadToS3, confirmUpload, listDocuments, listReports, getReport, generateReport, getDocument, getReportWorkflowExecutions, getWorkflowExecutionConversation } from '@/lib/api'
+import type { WorkflowId, ApiDocument, ApiDocumentDetail, ApiReport, ApiReportDetail, ApiUploadUrlResponse, ReportFinding, DocumentStatus, ReportStatus, NarrativeFindingExplanation, WorkflowExecutionSummary, AgentConversation, AgentMessage } from '@/lib/types'
 import {
   ShieldIcon,
   DiceIcon,
@@ -16,9 +16,10 @@ import {
   UploadIcon,
   RefreshIcon,
   EyeIcon,
+  SparklesIcon,
 } from '@/components/icons'
+import { ReportConversationPanel } from '@/components/report-conversation/ReportConversationPanel'
 
-const UPLOAD_MAX = 10
 
 const workflowIconMap = {
   shield: ShieldIcon,
@@ -77,6 +78,89 @@ const SEVERITY_BADGE: Record<string, string> = {
 }
 
 const EVIDENCE_PAGE_SIZE = 10
+
+function MessageBubble({ message }: { message: AgentMessage }) {
+  const [expanded, setExpanded] = useState(message.role === 'ASSISTANT')
+  const [copied, setCopied] = useState(false)
+
+  let parsedJson: unknown = null
+  let isValidJson = false
+  if (message.role === 'ASSISTANT') {
+    try {
+      parsedJson = JSON.parse(message.content)
+      isValidJson = true
+    } catch {
+      /* raw text fallback */
+    }
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const isRight = message.role === 'USER'
+
+  return (
+    <div className={`flex flex-col gap-1 ${isRight ? 'items-end' : 'items-start'}`}>
+      <div className={`flex items-center gap-2 ${isRight ? 'flex-row-reverse' : ''}`}>
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${
+          message.role === 'SYSTEM' ? 'bg-slate-200 text-slate-500' :
+          message.role === 'USER' ? 'bg-indigo-100 text-indigo-600' :
+          'bg-slate-100 text-slate-600'
+        }`}>
+          {message.role}
+        </span>
+        <span className="text-[10px] text-slate-400">#{message.sequence}</span>
+      </div>
+
+      {message.role === 'ASSISTANT' ? (
+        <div className="w-full bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100">
+            <span className="text-[10px] text-slate-400">{isValidJson ? 'JSON response' : 'Text response'}</span>
+            <button
+              onClick={handleCopy}
+              className="text-[10px] text-slate-500 hover:text-indigo-600 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-slate-100 transition-colors"
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          {isValidJson ? (
+            <pre className="px-3 py-3 text-xs text-slate-700 overflow-x-auto leading-relaxed font-mono">
+              {JSON.stringify(parsedJson, null, 2)}
+            </pre>
+          ) : (
+            <div className="px-3 py-3 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
+              {message.content}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className={`max-w-[90%] rounded-xl overflow-hidden border ${
+          message.role === 'SYSTEM' ? 'bg-slate-50 border-slate-200' : 'bg-indigo-50 border-indigo-100'
+        }`}>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-3 transition-colors ${
+              message.role === 'SYSTEM' ? 'text-slate-500 hover:bg-slate-100' : 'text-indigo-700 hover:bg-indigo-100'
+            }`}
+          >
+            <span className="font-medium">{expanded ? 'Hide content' : 'Show content'}</span>
+            <span className={`text-xs transition-transform ${expanded ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+          {expanded && (
+            <div className={`px-3 pb-3 text-xs leading-relaxed whitespace-pre-wrap break-words max-h-64 overflow-y-auto ${
+              message.role === 'SYSTEM' ? 'text-slate-600' : 'text-indigo-800'
+            }`}>
+              {message.content}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function FindingCard({ finding, narrativeExplanation }: { finding: ReportFinding; narrativeExplanation?: NarrativeFindingExplanation }) {
   const [expanded, setExpanded] = useState(false)
@@ -241,6 +325,14 @@ export default function WorkflowsPage() {
   const [isLoadingDocPreview, setIsLoadingDocPreview] = useState(false)
   const [toast, setToast] = useState<{ message: string } | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [workflowExecutions, setWorkflowExecutions] = useState<WorkflowExecutionSummary[]>([])
+  const [isLoadingExecutions, setIsLoadingExecutions] = useState(false)
+  const [executionsError, setExecutionsError] = useState<string | null>(null)
+  const [conversationTarget, setConversationTarget] = useState<WorkflowExecutionSummary | null>(null)
+  const [conversation, setConversation] = useState<AgentConversation | null>(null)
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
+  const [conversationError, setConversationError] = useState<string | null>(null)
+  const [isCheckpointRun, setIsCheckpointRun] = useState(false)
 
   const showToast = useCallback((message: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -281,6 +373,16 @@ export default function WorkflowsPage() {
     setIsLoadingDetail(true)
     setReportDetailError(null)
     setReportDetail(null)
+    setWorkflowExecutions([])
+    setIsLoadingExecutions(true)
+    setExecutionsError(null)
+    setConversationTarget(null)
+    setConversation(null)
+    // Fetch executions independently — failure here doesn't block the report
+    getReportWorkflowExecutions(id)
+      .then(execs => setWorkflowExecutions(execs))
+      .catch(err => setExecutionsError(err instanceof Error ? err.message : 'Failed to load agent runs'))
+      .finally(() => setIsLoadingExecutions(false))
     try {
       const detail = await getReport(id)
       setReportDetail(detail)
@@ -289,6 +391,33 @@ export default function WorkflowsPage() {
     } finally {
       setIsLoadingDetail(false)
     }
+  }, [])
+
+  const handleViewConversation = useCallback(async (exec: WorkflowExecutionSummary) => {
+    setConversationTarget(exec)
+    setConversation(null)
+    setIsLoadingConversation(true)
+    setConversationError(null)
+    setIsCheckpointRun(false)
+    try {
+      const conv = await getWorkflowExecutionConversation(exec.id)
+      if (conv === null) {
+        setIsCheckpointRun(true)
+      } else {
+        setConversation(conv)
+      }
+    } catch (err) {
+      setConversationError(err instanceof Error ? err.message : 'Failed to load conversation')
+    } finally {
+      setIsLoadingConversation(false)
+    }
+  }, [])
+
+  const handleCloseConversation = useCallback(() => {
+    setConversationTarget(null)
+    setConversation(null)
+    setConversationError(null)
+    setIsCheckpointRun(false)
   }, [])
 
   useEffect(() => {
@@ -312,7 +441,7 @@ export default function WorkflowsPage() {
   const handleFiles = useCallback(
     async (incoming: File[], batchName: string, batchDescription: string) => {
       if (incoming.length === 0) return
-      const files = incoming.slice(0, UPLOAD_MAX)
+      const files = incoming
       const errors: string[] = []
 
       setIsUploading(true)
@@ -389,7 +518,7 @@ export default function WorkflowsPage() {
     if (files.length === 0) return
     const date = new Date()
     const defaultBatchName = `Batch-${date.toISOString().slice(0, 10).replace(/-/g, '')}-${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}`
-    setPendingFiles(files.slice(0, UPLOAD_MAX))
+    setPendingFiles(files)
     setBatchName(defaultBatchName)
     setBatchDescription('')
   }, [])
@@ -754,7 +883,16 @@ export default function WorkflowsPage() {
                 )}
               </div>
               <button
-                onClick={() => { setReportDetail(null); setReportDetailError(null) }}
+                onClick={() => {
+                  setReportDetail(null)
+                  setReportDetailError(null)
+                  setWorkflowExecutions([])
+                  setExecutionsError(null)
+                  setConversationTarget(null)
+                  setConversation(null)
+                  setConversationError(null)
+                  setIsCheckpointRun(false)
+                }}
                 className="ml-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors text-lg leading-none"
               >
                 ✕
@@ -843,7 +981,158 @@ export default function WorkflowsPage() {
                       <p className="text-sm text-amber-900 leading-relaxed whitespace-pre-line">{reportDetail.narrative.reviewerNotes}</p>
                     </div>
                   )}
+
+                  {/* AI Conversation Panel */}
+                  <div className="mt-6 pt-6 border-t border-slate-200">
+                    <ReportConversationPanel
+                      reportId={reportDetail.id}
+                      reportStatus={reportDetail.status}
+                    />
+                  </div>
+
+                  {/* Agent Runs */}
+                  {(isLoadingExecutions || workflowExecutions.length > 0 || executionsError) && (
+                    <div className="mt-6 pt-6 border-t border-slate-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <SparklesIcon className="w-4 h-4 text-indigo-500" />
+                        <h3 className="text-sm font-semibold text-slate-700">Agent Runs</h3>
+                      </div>
+                      {isLoadingExecutions && (
+                        <div className="py-4 text-center text-sm text-slate-400">Loading agent runs…</div>
+                      )}
+                      {executionsError && !isLoadingExecutions && (
+                        <div className="py-4 text-center text-sm text-red-500">{executionsError}</div>
+                      )}
+                      {!isLoadingExecutions && workflowExecutions.length > 0 && (
+                        <div className="space-y-3">
+                          {workflowExecutions.map((exec) => (
+                            <div key={exec.id} className="flex items-center justify-between gap-4 border border-slate-200 rounded-xl p-4">
+                              <div className="flex flex-wrap items-center gap-3 min-w-0">
+                                <span className="px-2 py-0.5 text-xs font-bold bg-slate-800 text-white rounded uppercase tracking-wide">
+                                  {exec.workflowSlug}
+                                </span>
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  exec.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700' :
+                                  exec.status === 'RUNNING' ? 'bg-amber-50 text-amber-700' :
+                                  'bg-red-50 text-red-700'
+                                }`}>
+                                  {exec.status === 'RUNNING' && (
+                                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                                  )}
+                                  {exec.status}
+                                </span>
+                                {exec.overallScore !== null && (
+                                  <span className={`text-sm font-semibold ${exec.overallScore >= 70 ? 'text-red-600' : exec.overallScore >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                    {exec.overallScore}
+                                  </span>
+                                )}
+                                {exec.completedAt && exec.startedAt && (
+                                  <span className="text-xs text-slate-400">
+                                    {((new Date(exec.completedAt).getTime() - new Date(exec.startedAt).getTime()) / 1000).toFixed(1)}s
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleViewConversation(exec)}
+                                disabled={exec.status === 'RUNNING'}
+                                className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+                              >
+                                View Conversation
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conversation drawer */}
+      {conversationTarget && (
+        <div className="fixed inset-0 z-[60]">
+          <div className="absolute inset-0 bg-black/40" onClick={handleCloseConversation} />
+          <div className="absolute inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col z-10">
+            {/* Drawer header */}
+            <div className="flex items-start justify-between px-6 py-4 border-b border-slate-200 shrink-0">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <h2 className="text-base font-semibold text-slate-800">Agent Conversation</h2>
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                    conversationTarget.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700' :
+                    conversationTarget.status === 'RUNNING' ? 'bg-amber-50 text-amber-700' :
+                    'bg-red-50 text-red-700'
+                  }`}>
+                    {conversationTarget.status}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 font-mono truncate">
+                  {conversationTarget.workflowSlug} · {conversationTarget.id}
+                </p>
+              </div>
+              <button
+                onClick={handleCloseConversation}
+                className="ml-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors text-lg leading-none shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Drawer body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {isLoadingConversation && (
+                <div className="py-16 text-center text-sm text-slate-400">Loading conversation…</div>
+              )}
+              {conversationError && (
+                <div className="py-8 text-center text-sm text-red-500">{conversationError}</div>
+              )}
+              {isCheckpointRun && (
+                <div className="py-16 text-center">
+                  <p className="text-sm text-slate-500">No conversation log available for checkpoint-based runs.</p>
+                </div>
+              )}
+              {conversation && (
+                <div className="space-y-8">
+                  {[...conversation.executions]
+                    .sort((a, b) => a.sequence - b.sequence)
+                    .map((exec) => (
+                      <div key={exec.id}>
+                        {exec.status === 'FAILED' && exec.error && (
+                          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                            {exec.error}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2 mb-4 px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-xs">
+                          <span className="font-mono text-slate-600">{exec.model}</span>
+                          <span className="text-slate-300">|</span>
+                          <span className="text-slate-500 capitalize">{exec.provider}</span>
+                          <span className="text-slate-300">|</span>
+                          <span className="text-slate-500">{(exec.promptTokens + exec.completionTokens).toLocaleString()} tokens</span>
+                          <span className="text-[10px] text-slate-400">({exec.promptTokens}↑ {exec.completionTokens}↓)</span>
+                          <span className="text-slate-300">|</span>
+                          <span className="text-slate-500">{(exec.latencyMs / 1000).toFixed(2)}s</span>
+                          <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            exec.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700' :
+                            exec.status === 'RUNNING' ? 'bg-amber-50 text-amber-700' :
+                            'bg-red-50 text-red-700'
+                          }`}>
+                            {exec.status}
+                          </span>
+                        </div>
+                        <div className="space-y-4">
+                          {[...exec.messages]
+                            .sort((a, b) => a.sequence - b.sequence)
+                            .map((msg) => (
+                              <MessageBubble key={msg.id} message={msg} />
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
               )}
             </div>
           </div>
@@ -880,7 +1169,7 @@ export default function WorkflowsPage() {
       {/* File upload zone */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
         <p className="text-xs text-slate-500 mb-3">
-          Drag and drop files or click to browse (max {UPLOAD_MAX} files)
+          Drag and drop files or click to browse
         </p>
         <div
           onDragOver={handleDragOver}
@@ -1159,11 +1448,18 @@ export default function WorkflowsPage() {
                       </td>
                       <td className="px-5 py-3.5 text-slate-500">{formatDate(report.createdAt)}</td>
                       <td className="px-5 py-3.5">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${REPORT_STATUS_BADGE[report.status] ?? 'bg-slate-100 text-slate-600'}`}
-                        >
-                          {REPORT_STATUS_LABEL[report.status] ?? report.status}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${REPORT_STATUS_BADGE[report.status] ?? 'bg-slate-100 text-slate-600'}`}
+                          >
+                            {REPORT_STATUS_LABEL[report.status] ?? report.status}
+                          </span>
+                          {report.status === 'FAILED' && (
+                            <span className="text-xs text-slate-400 leading-snug max-w-[180px]">
+                              Check ANTHROPIC_API_KEY if using Agent Skill mode.
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-3.5">
                         {report.summary?.severity ? (
