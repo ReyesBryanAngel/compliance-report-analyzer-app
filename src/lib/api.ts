@@ -1,7 +1,7 @@
-import type { ActiveInstructionResponse, AgentConversation, AgentExecutionDetail, ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse, InstructionItem, WorkflowConfigItem, WorkflowExecutionSummary } from './types'
+import type { ActiveInstructionResponse, AgentConversation, AgentExecutionDetail, ApiDocument, ApiDocumentDetail, ApiListResponse, ApiReport, ApiReportDetail, ApiReportsListResponse, ApiUploadUrlResponse, InstructionItem, WorkflowExecutionSummary } from './types'
 
-export const API_BASE = '/api/backend'
-// export const API_BASE = 'http://127.0.0.1:3001/api/v1'
+// export const API_BASE = '/api/backend'
+export const API_BASE = 'http://127.0.0.1:3001/api/v1'
 async function login(): Promise<string> {
   const res = await fetch('/api/auth/login', { method: 'POST' })
   if (!res.ok) throw new Error(`Login failed (${res.status})`)
@@ -134,31 +134,6 @@ export function getOrganizationId(): string | null {
   } catch {
     return null
   }
-}
-
-// Workflow config
-
-export async function getWorkflowConfigs(): Promise<WorkflowConfigItem[]> {
-  const res = await fetchWithAuth(`${API_BASE}/workflow-config`)
-  if (!res.ok) throw new Error(`Get workflow configs failed (${res.status})`)
-  const data = await res.json() as { configs: WorkflowConfigItem[] }
-  return data.configs
-}
-
-export async function setWorkflowConfig(workflow: string, mode: 'checkpoints' | 'agent_skill'): Promise<WorkflowConfigItem> {
-  const res = await fetchWithAuth(`${API_BASE}/workflow-config/${encodeURIComponent(workflow)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode }),
-  })
-  if (!res.ok) throw new Error(`Set workflow config failed (${res.status})`)
-  return res.json() as Promise<WorkflowConfigItem>
-}
-
-export async function resetWorkflowConfig(workflow: string): Promise<WorkflowConfigItem> {
-  const res = await fetchWithAuth(`${API_BASE}/workflow-config/${encodeURIComponent(workflow)}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`Reset workflow config failed (${res.status})`)
-  return res.json() as Promise<WorkflowConfigItem>
 }
 
 // SME instructions

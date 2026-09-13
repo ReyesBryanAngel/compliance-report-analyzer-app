@@ -2,9 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  getWorkflowConfigs,
-  setWorkflowConfig,
-  resetWorkflowConfig,
   listInstructions,
   getActiveInstruction,
   createInstruction,
@@ -12,10 +9,9 @@ import {
   deleteInstruction,
   getOrganizationId,
 } from '@/lib/api'
-import type { WorkflowConfigItem, InstructionItem, ActiveInstructionResponse } from '@/lib/types'
+import type { InstructionItem, ActiveInstructionResponse } from '@/lib/types'
 import {
   SparklesIcon,
-  ListChecksIcon,
   PlusIcon,
   TrashIcon,
   CheckIcon,
@@ -50,13 +46,6 @@ const WORKFLOW_DISPLAY: Record<WorkflowSlug, { name: string; description: string
     description: 'Verify document authenticity and detect tampering',
     color: 'teal',
   },
-}
-
-const COLOR_RING: Record<string, string> = {
-  indigo: 'ring-indigo-500',
-  amber: 'ring-amber-500',
-  rose: 'ring-rose-500',
-  teal: 'ring-teal-500',
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -494,103 +483,9 @@ function InstructionsPanel({
   )
 }
 
-// ─── Workflow Config Card ────────────────────────────────────────────────────
-
-function WorkflowConfigCard({
-  config,
-  readonly,
-  onChange,
-}: {
-  config: WorkflowConfigItem
-  readonly: boolean
-  onChange: (updated: WorkflowConfigItem) => void
-}) {
-  const slug = config.workflow as WorkflowSlug
-  const display = WORKFLOW_DISPLAY[slug]
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  if (!display) return null
-
-  async function handleModeChange(mode: 'checkpoints' | 'agent_skill') {
-    if (mode === config.mode) return
-    setSaving(true)
-    setError(null)
-    try {
-      let updated: WorkflowConfigItem
-      const isResettingToDefault = mode === 'agent_skill' && !config.isDefault
-      if (isResettingToDefault) {
-        updated = await resetWorkflowConfig(slug)
-      } else {
-        updated = await setWorkflowConfig(slug, mode)
-      }
-      onChange(updated)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const ring = COLOR_RING[display.color] ?? 'ring-slate-300'
-
-  return (
-    <div className={`bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-4 ring-0 focus-within:ring-2 ${ring}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-800 leading-snug">{display.name}</p>
-          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{display.description}</p>
-        </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {config.isDefault && (
-            <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-slate-100 text-slate-500">Default</span>
-          )}
-          {!config.isDefault && config.updatedAt && (
-            <span className="text-xs text-slate-400">{formatDate(config.updatedAt)}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Mode toggle */}
-      <div className="flex gap-2">
-        <button
-          onClick={() => handleModeChange('checkpoints')}
-          disabled={saving || readonly}
-          className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all ${
-            config.mode === 'checkpoints'
-              ? 'bg-slate-800 text-white border-slate-800'
-              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          <ListChecksIcon className="w-3.5 h-3.5 flex-shrink-0" />
-          Checkpoints
-        </button>
-        <button
-          onClick={() => handleModeChange('agent_skill')}
-          disabled={saving || readonly}
-          className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all ${
-            config.mode === 'agent_skill'
-              ? 'bg-indigo-600 text-white border-indigo-600'
-              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-          } disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          <SparklesIcon className="w-3.5 h-3.5 flex-shrink-0" />
-          Agent Skill
-        </button>
-      </div>
-
-      {saving && <p className="text-xs text-slate-400">Saving…</p>}
-      {error && <p className="text-xs text-red-600">{error}</p>}
-    </div>
-  )
-}
-
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [configs, setConfigs] = useState<WorkflowConfigItem[]>([])
-  const [configsLoading, setConfigsLoading] = useState(true)
-  const [configsError, setConfigsError] = useState<string | null>(null)
   const [activeInstructionTab, setActiveInstructionTab] = useState<WorkflowSlug>('kyc')
   const [orgId, setOrgId] = useState<string | null>(null)
   const [orgIdReady, setOrgIdReady] = useState(false)
@@ -599,18 +494,6 @@ export default function SettingsPage() {
     setOrgId(getOrganizationId())
     setOrgIdReady(true)
   }, [])
-
-  useEffect(() => {
-    setConfigsLoading(true)
-    getWorkflowConfigs()
-      .then(setConfigs)
-      .catch((e: Error) => setConfigsError(e.message))
-      .finally(() => setConfigsLoading(false))
-  }, [])
-
-  function handleConfigChange(updated: WorkflowConfigItem) {
-    setConfigs((prev) => prev.map((c) => (c.workflow === updated.workflow ? updated : c)))
-  }
 
   const readonly = orgIdReady && !orgId
 
@@ -621,7 +504,7 @@ export default function SettingsPage() {
         <div className="mb-8">
           <h1 className="text-xl font-bold text-slate-800">Agent Skills Settings</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Configure how each compliance workflow executes and manage the SME instructions used by the AI engine.
+            Manage the SME instructions used by the AI engine for each compliance workflow.
           </p>
           {readonly && (
             <div className="mt-3 flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
@@ -630,44 +513,7 @@ export default function SettingsPage() {
           )}
         </div>
 
-        {/* ── Section 1: Execution Mode ── */}
-        <section className="mb-10">
-          <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-sm font-semibold text-slate-700">Execution Mode</h2>
-            <span className="text-xs text-slate-400">— choose how each workflow analyses documents</span>
-          </div>
-
-          {configsLoading && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {WORKFLOW_SLUGS.map((slug) => (
-                <div key={slug} className="h-36 bg-white border border-slate-200 rounded-2xl animate-pulse" />
-              ))}
-            </div>
-          )}
-
-          {!configsLoading && configsError && (
-            <p className="text-sm text-red-600">{configsError}</p>
-          )}
-
-          {!configsLoading && !configsError && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {WORKFLOW_SLUGS.map((slug) => {
-                const config = configs.find((c) => c.workflow === slug)
-                if (!config) return null
-                return (
-                  <WorkflowConfigCard
-                    key={slug}
-                    config={config}
-                    readonly={readonly}
-                    onChange={handleConfigChange}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* ── Section 2: SME Instructions ── */}
+        {/* ── SME Instructions ── */}
         <section>
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-sm font-semibold text-slate-700">SME Instructions</h2>
