@@ -332,7 +332,7 @@ export default function WorkflowsPage() {
   const [conversation, setConversation] = useState<AgentConversation | null>(null)
   const [isLoadingConversation, setIsLoadingConversation] = useState(false)
   const [conversationError, setConversationError] = useState<string | null>(null)
-  const [isCheckpointRun, setIsCheckpointRun] = useState(false)
+  const [hasNoConversation, setHasNoConversation] = useState(false)
 
   const showToast = useCallback((message: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -398,11 +398,11 @@ export default function WorkflowsPage() {
     setConversation(null)
     setIsLoadingConversation(true)
     setConversationError(null)
-    setIsCheckpointRun(false)
+    setHasNoConversation(false)
     try {
       const conv = await getWorkflowExecutionConversation(exec.id)
       if (conv === null) {
-        setIsCheckpointRun(true)
+        setHasNoConversation(true)
       } else {
         setConversation(conv)
       }
@@ -417,7 +417,7 @@ export default function WorkflowsPage() {
     setConversationTarget(null)
     setConversation(null)
     setConversationError(null)
-    setIsCheckpointRun(false)
+    setHasNoConversation(false)
   }, [])
 
   useEffect(() => {
@@ -891,7 +891,7 @@ export default function WorkflowsPage() {
                   setConversationTarget(null)
                   setConversation(null)
                   setConversationError(null)
-                  setIsCheckpointRun(false)
+                  setHasNoConversation(false)
                 }}
                 className="ml-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors text-lg leading-none"
               >
@@ -1090,9 +1090,9 @@ export default function WorkflowsPage() {
               {conversationError && (
                 <div className="py-8 text-center text-sm text-red-500">{conversationError}</div>
               )}
-              {isCheckpointRun && (
+              {hasNoConversation && (
                 <div className="py-16 text-center">
-                  <p className="text-sm text-slate-500">No conversation log available for checkpoint-based runs.</p>
+                  <p className="text-sm text-slate-500">No conversation log available for this run.</p>
                 </div>
               )}
               {conversation && (

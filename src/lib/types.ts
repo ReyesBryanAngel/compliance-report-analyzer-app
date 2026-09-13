@@ -178,13 +178,6 @@ export interface ApiReportDetail {
   createdAt: string
 }
 
-export interface WorkflowConfigItem {
-  workflow: string
-  mode: 'checkpoints' | 'agent_skill'
-  isDefault: boolean
-  updatedAt: string | null
-}
-
 export interface InstructionItem {
   id: string
   workflow: string

@@ -129,7 +129,7 @@ export default function WorkflowExecutionsPage() {
   const [conversation, setConversation] = useState<AgentConversation | null>(null)
   const [isLoadingConversation, setIsLoadingConversation] = useState(false)
   const [conversationError, setConversationError] = useState<string | null>(null)
-  const [isCheckpointRun, setIsCheckpointRun] = useState(false)
+  const [hasNoConversation, setHasNoConversation] = useState(false)
 
   const buildParams = useCallback((cursor?: string) => ({
     limit: PAGE_LIMIT,
@@ -185,11 +185,11 @@ export default function WorkflowExecutionsPage() {
     setConversation(null)
     setIsLoadingConversation(true)
     setConversationError(null)
-    setIsCheckpointRun(false)
+    setHasNoConversation(false)
     try {
       const conv = await getWorkflowExecutionConversation(exec.id)
       if (conv === null) {
-        setIsCheckpointRun(true)
+        setHasNoConversation(true)
       } else {
         setConversation(conv)
       }
@@ -204,7 +204,7 @@ export default function WorkflowExecutionsPage() {
     setConversationTarget(null)
     setConversation(null)
     setConversationError(null)
-    setIsCheckpointRun(false)
+    setHasNoConversation(false)
   }
 
   return (
@@ -245,9 +245,9 @@ export default function WorkflowExecutionsPage() {
               {conversationError && (
                 <div className="py-8 text-center text-sm text-red-500">{conversationError}</div>
               )}
-              {isCheckpointRun && (
+              {hasNoConversation && (
                 <div className="py-16 text-center">
-                  <p className="text-sm text-slate-500">No conversation log available for checkpoint-based runs.</p>
+                  <p className="text-sm text-slate-500">No conversation log available for this run.</p>
                 </div>
               )}
               {conversation && (
